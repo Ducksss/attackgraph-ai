@@ -1,0 +1,25 @@
+[project]
+name = "attackgraph-ai"
+version = "0.1.0"
+description = "Pre-deployment comparison of synthetic cloud permission snapshots, with Amazon Bedrock explanations."
+requires-python = ">=3.11"
+dependencies = [
+    "streamlit>=1.40",
+    "networkx>=3.2",
+    "boto3>=1.35",
+    "jsonschema>=4.21",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools]
+packages = ["attackgraph"]
+
+[tool.setuptools.package-data]
+attackgraph = ["snapshot.schema.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

@@ -1,0 +1,6 @@
+# Versions verified together on 29 September 2026 (Python 3.13).
+streamlit==1.64.0
+networkx==3.7
+boto3==1.43.104
+jsonschema==4.26.0
+pytest==9.1.1

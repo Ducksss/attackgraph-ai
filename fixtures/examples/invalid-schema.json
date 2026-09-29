@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "snapshot_id": "example-invalid",
+  "name": "Invalid: field errors for the validator to report",
+  "synthetic": true,
+  "model_version": "attackgraph-rules-v1",
+  "coverage": {
+    "policy_controls": {
+      "permissions_boundaries": "resolved",
+      "service_control_policies": "resolved",
+      "resource_policies": "resolved",
+      "conditions": "resolved",
+      "explicit_denies": "resolved"
+    },
+    "unmodelled_mechanisms": []
+  },
+  "nodes": [
+    {"id": "p-ci-deployer", "kind": "principal", "label": "CI deploy user", "account_id": "syn-app-prod", "comment": "unknown fields are rejected"},
+    {"id": "r-deploy-admin", "kind": "role", "label": "Deployment admin role", "account_id": "123456789012"}
+  ],
+  "facts": [
+    {"id": "f-ci-pass-deploy-admin", "predicate": "iam_pass_role_to_lambda", "subject": "p-ci-deployer", "object": "r-deploy-admin", "state": true},
+    {"id": "f-ci-pass-missing", "predicate": "iam_pass_role_to_lambda", "subject": "p-ci-deployer", "object": "r-missing-role", "state": "true"}
+  ],
+  "entry_principals": ["p-ci-deployer"],
+  "protected_targets": [
+    {"node": "r-deploy-admin", "classification": "privileged_role"}
+  ],
+  "expected_access": []
+}
