@@ -24,7 +24,7 @@ from .compare import Comparison, FindingDelta
 from .simulate import FixCandidate
 from .snapshot import PREDICATES
 
-PROMPT_VERSION = "explain-v1"
+PROMPT_VERSION = "explain-v2"
 DEFAULT_MODEL_ID = "apac.amazon.nova-pro-v1:0"
 DEFAULT_REGION = "ap-southeast-1"
 TIMEOUT_SECONDS = 20
@@ -49,12 +49,13 @@ Rules:
 - Do not dispute or change the finding, its severity, status, counts or coverage.
 - Describe only the fix candidate supplied in the packet, with the outcome the engine recorded. If no candidate is supplied, say that no engine-tested fix is available. Never propose another fix.
 - Make clear that this is a synthetic model: nothing was deployed, executed or changed in any AWS account, and the result is not evidence of a real compromise.
-- Refer to entities only by their aliases.
+- Refer to entities only by their aliases, and give each one its kind the first time you name it, for example "principal P1", "role R1", "Lambda workload L1".
+- State assumptions exactly as the packet words them. The entry principal is treated as controlled by the party proposing the change; never call it trusted or compromised.
 
 Reply with one JSON object and nothing else, using exactly these keys:
 {"finding_id": "A1", "summary": "...", "evidence_ids": ["F1"], "fix_candidate_id": "X1", "limitations": "..."}
 - summary: plain text, at most 900 characters. Say what changed, why the modelled access matters, and the recorded effect of the fix candidate.
-- evidence_ids: the F# and D# aliases the summary relies on.
+- evidence_ids: the F#, D# and E# aliases the summary relies on.
 - fix_candidate_id: the supplied X# you describe, or null.
 - limitations: plain text, at most 400 characters, stating the limits of this synthetic model."""
 
@@ -245,7 +246,7 @@ def build_packet(comparison: Comparison, delta: FindingDelta, fixes: tuple[FixCa
         fix_candidate_id=next(iter(fix_alias), None),
         payload=payload,
         display=display,
-        evidence_aliases=frozenset(fact_alias.values()) | frozenset(derived_alias.values()),
+        evidence_aliases=frozenset(fact_alias.values()) | frozenset(derived_alias.values()) | frozenset(check_alias.values()),
         fix_aliases=frozenset(fix_alias.values()),
     )
 
@@ -475,7 +476,7 @@ def _classify_error(exc: Exception) -> tuple[str, dict]:
     response = getattr(exc, "response", None)
     if isinstance(response, dict) and "Error" in response:
         code = response["Error"].get("Code", name)
-        message = redact(str(response["Error"].get("Message", "")))[:200]
+        message = redact(str(response["Error"].get("Message", "")))[:400]
         return "unavailable", {"error": f"Bedrock returned {code}: {message}"}
     return "unavailable", {"error": f"Bedrock call failed ({name})."}
 

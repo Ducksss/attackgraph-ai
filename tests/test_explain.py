@@ -188,3 +188,17 @@ def test_aws_error_messages_are_redacted(demo):
     result = explainer(FakeClient(exc=error)).explain(packet)
     assert "123456789012" not in result.error and "arn:aws" not in result.error
     assert "AccessDeniedException" in result.error and "<arn>" in result.error
+
+
+def test_expected_access_checks_are_citable_evidence(demo):
+    # A live Nova Pro reply (AC-9 run 9, explain-v1) cited E1 and E2; both are packet identifiers.
+    _, _, packet = demo
+    reply = json.dumps({**VALID, "evidence_ids": ["F1", "E1", "E2"]})
+    result = explainer(FakeClient(reply=reply)).explain(packet)
+    assert result.ok
+    assert result.evidence_ids == ("f-ci-pass-deploy-admin", "ea-ci-reads-build-artifacts", "ea-ci-deploys-app-runtime")
+
+
+def test_prompt_pins_assumption_wording_and_entity_kinds():
+    assert "never call it trusted or compromised" in SYSTEM_PROMPT
+    assert '"Lambda workload L1"' in SYSTEM_PROMPT
