@@ -12,7 +12,7 @@ This is a static, defensive review prototype. It never connects to the accounts 
 |---|---|
 | Engine: validation, Rules A and B, comparison, fix simulation | Implemented. The automated suite passes (`pytest`). |
 | Streamlit workspace | Implemented. Checked in a local browser in the demo, incomplete-coverage, validation-error and AI-fallback states, and by headless `streamlit.testing` tests. |
-| Bedrock explanation | Implemented with the Converse API and tested against a fake client. **No live Bedrock response has been recorded yet.** Run `scripts/check_bedrock.py --invoke` to produce the AC-9 evidence. |
+| Bedrock explanation | Live on 29 September 2026: Amazon Nova Pro returned 8 validated explanations out of 10 with prompt `explain-v1`, none with an unsupported access or fix claim ([evidence](docs/evidence/ac9-bedrock-review-2026-09-29.md)). The wording defects found in that run are fixed in `explain-v2`, which has not been run live yet. |
 | Demo video, hosting | Not started. |
 
 ## Quick start
@@ -45,7 +45,7 @@ Open http://localhost:8501, choose **Load demo**, then **Compare changes**.
 | `ATTACKGRAPH_BEDROCK_REGION` | `AWS_REGION`, then `ap-southeast-1` | Bedrock runtime region |
 | `ATTACKGRAPH_AI` | `on` | `off` disables the explanation button, for example on a public host |
 
-The default is Amazon Nova Pro through the APAC cross-region inference profile. A read-only lookup on 29 September 2026 reported it `ACTIVE` in `ap-southeast-1` for this account. That lookup does not prove inference works; only `--invoke` does.
+The default is Amazon Nova Pro through the APAC cross-region inference profile, confirmed with live inference in `ap-southeast-1` on 29 September 2026. A newly created AWS account can return `AccessDeniedException: Your account is currently being verified` for up to about two hours; the app shows its fallback until then.
 
 Credentials come from the standard AWS credential chain of the machine running Streamlit. They never enter uploads, prompts, reports, logs or the browser. For the demo, use an IAM user or role limited to `bedrock:InvokeModel` on the inference profile and the foundation models it routes to, not root-user keys.
 
@@ -159,7 +159,7 @@ Complete candidates rank by fewest failing expected-access checks, then most fin
 | AC-6 | `tests/test_rules.py`: alternative routes, no effective single fix, cycles, stable tie-breaks |
 | AC-7 | `tests/test_simulate.py`: verified fix, expected access kept, input bytes unchanged, ranking |
 | AC-8 | `tests/test_explain.py`: invalid IDs, malformed output, refusal, timeout, errors, cache, stale replies |
-| AC-9 | Manual: `scripts/check_bedrock.py --invoke --repeat 10 --out ac9-review.md`, then review every claim |
+| AC-9 | [Run on 29 September](docs/evidence/ac9-bedrock-review-2026-09-29.md) with `explain-v1`: 8 of 10 validated, no unsupported claims, wording defects fixed in `explain-v2`. Re-run `scripts/check_bedrock.py --invoke --repeat 10 --out ac9-review.md` for `explain-v2` and review every claim before recording |
 | AC-10 | `tests/test_explain.py` (no uploaded text in the prompt, escaping) and `tests/test_validation.py` (oversized and unsupported files) |
 | AC-11 | `tests/test_report.py`, `tests/test_app.py`; keyboard pass by hand |
 | AC-12 | Manual: fresh clone run, video in a signed-out browser, claims match this README |
@@ -192,5 +192,6 @@ attackgraph/render.py          escaping and Graphviz witness
 fixtures/demo/                 baseline, proposed, repaired
 fixtures/examples/             unknown fact, unresolved SCP, label injection, invalid files
 scripts/check_bedrock.py       Bedrock access and AC-9 evidence
+docs/evidence/                 recorded live Bedrock runs and their review
 tests/                         automated suite
 ```
