@@ -1,4 +1,4 @@
-"""AC-11: the Streamlit page, driven headlessly with streamlit.testing."""
+"""AC-11: the Streamlit app's two pages, driven headlessly with streamlit.testing."""
 
 import pytest
 from helpers import ROOT
@@ -17,12 +17,16 @@ def hidden_credentials(monkeypatch):
     monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "true")
 
 
-def start(scenario: str | None = None) -> AppTest:
+def start(scenario: str | None = None, page: str | None = "views/demo.py") -> AppTest:
+    """Open the app at / and, unless page is None, follow the link to that page."""
     at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=30)
     if scenario:
         at.query_params["scenario"] = scenario
     at.run()
     assert not at.exception, at.exception
+    if page:
+        at.switch_page(page).run()
+        assert not at.exception, at.exception
     return at
 
 
@@ -45,9 +49,16 @@ def click(at: AppTest, label: str) -> AppTest:
     return at
 
 
+def test_overview_explains_the_problem_and_links_to_the_demo(hidden_credentials):
+    page = html(start(page=None))
+    assert "Ship permission changes without shipping admin access." in page
+    assert 'href="/demo"' in page and "Permission reviews miss paths," in page
+    assert "Recorded Nova Pro reply" in page and "1 new path" not in page
+
+
 def test_first_visit_runs_the_flagship_demo_without_clicks(app):
     page = html(app)
-    assert "See what a permission change unlocks" in page
+    assert "Watch one permission" in page and "Ship permission changes" not in page
     assert "1 new path to a protected role" in page
     assert ">New</span><div class=\"ag-hop-text\">can pass Deployment admin role to</div>" in page
     assert "Why the route works" in page and "7 of 7 hold" in page
@@ -81,8 +92,8 @@ def test_bedrock_explanation_is_labelled_and_translated(app):
     app.session_state["explainer"] = BedrockExplainer(model_id, region, client=FakeClient())
     click(app, "Explain with Amazon Bedrock")
     markdown = texts(app.markdown).replace("\\", "")  # compare the rendered text, not the Markdown escapes
-    assert "AI explanation" in markdown and "req-123" in markdown
-    assert "f-ci-pass-deploy-admin" in markdown
+    assert "AI explanation" in markdown and "f-ci-pass-deploy-admin" in markdown
+    assert "<dt>Request</dt><dd>req-123</dd>" in html(app)
 
 
 def test_bedrock_failure_keeps_results_and_shows_the_deterministic_summary(app):

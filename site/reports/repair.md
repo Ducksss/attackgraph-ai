@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Generated | 2026-09-29T16:18:05Z |
+| Generated | 2026-09-29T17:02:41Z |
 | Analysis ID | `1b520603799eab67` |
 | Engine | 0.1.0 |
 | Security model | `attackgraph-rules-v1` |

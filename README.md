@@ -2,7 +2,9 @@
 
 **See what a cloud permission change unlocks, before you deploy it.**
 
-![AttackGraph AI: the route one new permission opens, from the CI deploy user to the deployment admin role](docs/images/hero.png)
+Try it at **[attackgraph-ai.vercel.app](https://attackgraph-ai.vercel.app)**: the overview explains the problem, and the [live demo](https://attackgraph-ai.vercel.app/demo) runs the real engine on bundled synthetic scenarios. No sign-up, no uploads, no AI calls on the hosted pages.
+
+![AttackGraph AI overview: a pull request widens iam:PassRole, completes all 7 conditions of a route to the admin role, and the engine reports the new path and a verified fix](docs/images/hero.png)
 
 A pull request that widens one IAM permission can quietly let a build pipeline run code as an administrator. Code review sees the changed line. AttackGraph AI compares the current and proposed configuration, draws the exact route that line opens, explains it in plain English with Amazon Bedrock, and proves which single revocation closes it.
 
@@ -20,7 +22,7 @@ It is a static, defensive review prototype built for the AWS Build Beyond Studen
 
 ![The route after the simulated fix: the revoked arrow is red and everything after it is faded](docs/images/fixed-path.png)
 
-<img src="docs/images/fix.png" alt="Fix card: high-risk paths 1 to 0, normal access 2 of 2, verified in this model" width="440">
+![Fix card: high-risk paths 1 to 0, normal access 2 of 2, verified in this model](docs/images/fix.png)
 
 ## Run it in one minute
 
@@ -34,7 +36,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/streamlit run app.py
 ```
 
-Open http://localhost:8501. The flagship demo runs as soon as the page loads, so the result is visible without a click. The other scenarios open from the switcher or by link: `?scenario=repair`, `?scenario=unknown`, `?scenario=invalid` and `?scenario=upload`.
+Open http://localhost:8501 for the overview, or go straight to the live demo at http://localhost:8501/demo. The flagship scenario runs as soon as the demo page loads, so the result is visible without a click. The other scenarios open from the switcher or by link: `/demo?scenario=repair`, `/demo?scenario=unknown`, `/demo?scenario=invalid` and `/demo?scenario=upload`. The local app is the one that makes live Amazon Bedrock calls and accepts uploads.
 
 ```bash
 .venv/bin/python -m pytest
@@ -45,9 +47,10 @@ Open http://localhost:8501. The flagship demo runs as soon as the page loads, so
 | Area | State on 30 September 2026 |
 |---|---|
 | Engine: validation, Rules A and B, comparison, fix simulation | Implemented. The automated suite passes (`pytest`). |
-| Streamlit page | Reskinned after the [Protex](https://protex-template.webflow.io/) template. Checked in a browser at desktop and phone widths in every scenario, and by headless `streamlit.testing` tests. |
+| Streamlit app | Two pages styled after the [Close](https://closecrm.webflow.io/) template: an overview at `/` that explains why the check is needed, and the live demo at `/demo`. Checked in a browser at desktop and phone widths in every scenario, and by headless `streamlit.testing` tests. |
+| Hosted site | [attackgraph-ai.vercel.app](https://attackgraph-ai.vercel.app): a static build of the same two pages for the bundled scenarios (see [Hosting](#hosting)). No uploads and no AI calls. The flagship scenario shows the recorded, reviewed Nova Pro reply from run 8 of the AC-9 evidence. |
 | Bedrock explanation | Live on 29 September 2026: Amazon Nova Pro returned 8 validated explanations out of 10 with prompt `explain-v1`, none with an unsupported access or fix claim ([evidence](docs/evidence/ac9-bedrock-review-2026-09-29.md)). The wording defects found in that run are fixed in `explain-v2`, which has not been run live yet. |
-| Demo video, hosting | Not started. |
+| Demo video | Not started. |
 
 ## Amazon Bedrock
 
@@ -75,12 +78,13 @@ Sends the demo finding through the real pipeline ten times (chargeable, each cal
 
 ## Demo script
 
-1. Open the page. The hero states the question and already shows the route the flagship change opens.
-2. **See the demo** jumps to the live result: "1 new path to a protected role", high-risk paths 0 to 1, coverage complete.
-3. **The path it opens**: CI deploy user, then the post-build hook function, then the deployment admin role. The amber arrow is the one new permission. **Why the route works** lists all 7 conditions and marks the changed one.
-4. **Explain with Amazon Bedrock**. Match each claim to the conditions card.
-5. **Simulate the fix**. The arrow turns red and dashed, high-risk paths go from 1 to 0, normal access stays at 2 of 2, and the card says "Verified in this model".
-6. Close on **Trust and limits**: synthetic data only. The prototype verifies this explicit model; wider AWS policy coverage is future work.
+1. Open the overview. The hero diagram is the whole idea: a pull request widens `iam:PassRole`, that one change completes all 7 conditions of a route to the admin role, and the engine reports the new path and a verified fix.
+2. Scroll to **Permission reviews miss paths**: the four reasons a line-by-line review misses this.
+3. **Open the live demo**. The flagship scenario is already computed: "1 new path to a protected role", high-risk paths 0 to 1, coverage complete.
+4. **The path it opens**: CI deploy user, then the post-build hook function, then the deployment admin role. The amber arrow is the one new permission. **The change** shows the fact that flipped and its JSON pointer, and explains `iam:PassRole` in one paragraph. **Why the route works** lists all 7 conditions and marks the changed one.
+5. **What this means**: press **Explain with Amazon Bedrock** in the local app, or read the recorded Nova Pro reply on the hosted page. Match each claim to the conditions card.
+6. **Simulate the fix**. The arrow turns red and dashed, high-risk paths go from 1 to 0, normal access stays at 2 of 2, and the card says "Verified in this model".
+7. Close on **Trust and limits** on the overview: synthetic data only. The prototype verifies this explicit model; wider AWS policy coverage is future work.
 
 The other scenarios show a comparison that closes the path, an unknown fact that makes the result incomplete rather than safe, and field-level validation errors.
 
@@ -105,7 +109,7 @@ baseline.json + proposed.json (synthetic)
 
 ### Snapshot format
 
-Snapshots are hand-authored JSON that follow [`attackgraph/snapshot.schema.json`](attackgraph/snapshot.schema.json). They are not Terraform plans or raw IAM policies, and the UI labels them "Synthetic configuration JSON".
+Snapshots are hand-authored JSON that follow [`attackgraph/snapshot.schema.json`](attackgraph/snapshot.schema.json). They are not Terraform plans or raw IAM policies, and the report labels them "Synthetic configuration JSON".
 
 | Record | Content |
 |---|---|
@@ -173,7 +177,7 @@ Complete candidates rank by fewest failing expected-access checks, then most fin
 | AC-8 | `tests/test_explain.py`: invalid IDs, malformed output, refusal, timeout, errors, cache, stale replies |
 | AC-9 | [Run on 29 September](docs/evidence/ac9-bedrock-review-2026-09-29.md) with `explain-v1`: 8 of 10 validated, no unsupported claims, wording defects fixed in `explain-v2`. Re-run `scripts/check_bedrock.py --invoke --repeat 10 --out ac9-review.md` for `explain-v2` and review every claim before recording |
 | AC-10 | `tests/test_explain.py` (no uploaded text in the prompt, escaping) and `tests/test_validation.py` (oversized and unsupported files) |
-| AC-11 | `tests/test_report.py`, `tests/test_app.py`; keyboard pass by hand |
+| AC-11 | `tests/test_report.py`, `tests/test_app.py` (both pages), `tests/test_site.py` (hosted build); keyboard pass by hand |
 | AC-12 | Manual: fresh clone run, video in a signed-out browser, claims match this README |
 
 Performance, measured on the build laptop against the two-second target: the bundled comparison plus fix simulation takes about 5 ms. A generated 100-node, 300-fact pair compares in about 1.5 s, and each fix simulation on it adds about 0.7 s.
@@ -185,16 +189,33 @@ Performance, measured on the build laptop against the two-second target: the bun
 - Entry-principal control and workload-code control are scenario assumptions, not findings about any real account.
 - Results describe the declared synthetic model. They are not a detection rate on real cloud environments.
 
-## Hosting note
+## Hosting
 
-Local execution plus a recorded video is the intended submission. If you host it, restrict it to bundled fixtures or set `ATTACKGRAPH_AI=off`. Do not expose an anonymous upload endpoint that can trigger chargeable Bedrock calls.
+Streamlit needs a long-lived WebSocket server, which Vercel does not run, so the hosted site is a static build. `scripts/build_site.py` runs the engine on every bundled scenario and renders the overview to `site/index.html` and the demo to `site/demo/index.html`, using the same card code as the app. The scenario tabs and the fix toggle switch between pre-computed states in the browser.
+
+The hosted pages make no AI calls and accept no uploads, as the PRD requires for anonymous visitors. The recorded Nova Pro reply appears only while its analysis ID and finding ID match the fresh analysis, so a change to the fixtures or rules hides it instead of showing a stale explanation. `tests/test_site.py` fails when the committed build is out of date.
+
+```bash
+.venv/bin/python scripts/build_site.py
+```
+
+```bash
+cd site && vercel deploy --prod
+```
+
+If you host the Streamlit app itself, restrict it to bundled fixtures or set `ATTACKGRAPH_AI=off`. Do not expose an anonymous upload endpoint that can trigger chargeable Bedrock calls.
 
 ## Layout
 
 ```text
-app.py                         Streamlit page: story layout, scenario switching, uploads
+app.py                         Streamlit router: overview at /, live demo at /demo
+views/overview.py              overview page
+views/demo.py                  live demo: scenario switching, uploads, Bedrock, fix simulation
+attackgraph/landing.py         overview sections: pipeline diagram, why, how, trust, footer
+attackgraph/page.py            demo cards shared by the app and the static build
+attackgraph/scenarios.py       bundled scenarios
 attackgraph/story.py           plain-language view of one finding (path, conditions, changes)
-attackgraph/web.py             Protex-style CSS and escaped HTML fragments
+attackgraph/web.py             Close-style CSS and escaped HTML fragments
 attackgraph/snapshot.py        records, parsing, validation
 attackgraph/snapshot.schema.json
 attackgraph/analysis.py        Rule A/B candidates, coverage, witnesses (NetworkX)
@@ -206,7 +227,9 @@ attackgraph/render.py          escaping and Graphviz witness
 fixtures/demo/                 baseline, proposed, repaired
 fixtures/examples/             unknown fact, unresolved SCP, label injection, invalid files
 scripts/check_bedrock.py       Bedrock access and AC-9 evidence
+scripts/build_site.py          static build of both pages for Vercel
+site/                          the built site: index.html, demo/, reports/, vercel.json
 docs/evidence/                 recorded live Bedrock runs and their review
-docs/images/                   README screenshots of the running app
+docs/images/                   README screenshots of the hosted build
 tests/                         automated suite
 ```

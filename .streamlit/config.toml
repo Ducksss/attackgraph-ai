@@ -1,25 +1,25 @@
-# Theme after the Protex template: near-black green, DM Sans, green accent.
+# Theme after the Close CRM template: light greys, Inter, indigo accent.
 [theme]
-base = "dark"
-primaryColor = "#53db78"
-backgroundColor = "#000d01"
-secondaryBackgroundColor = "#07190c"
-textColor = "#f2f5f2"
-borderColor = "#242424"
-dataframeBorderColor = "#242424"
+base = "light"
+primaryColor = "#6366f1"
+backgroundColor = "#f9f9fa"
+secondaryBackgroundColor = "#f4f4f6"
+textColor = "#111114"
+borderColor = "#e2e2e8"
+dataframeBorderColor = "#e2e2e8"
 showWidgetBorder = true
 baseRadius = "8px"
-buttonRadius = "4px"
-font = "DM Sans:https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap, sans-serif"
-headingFont = "DM Sans:https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap, sans-serif"
+buttonRadius = "8px"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
 headingFontWeights = 500
 codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap, monospace"
-linkColor = "#53db78"
-greenColor = "#53db78"
-orangeColor = "#ffc24b"
-redColor = "#ff7a7a"
-codeTextColor = "#9fe8b4"
-codeBackgroundColor = "#0a1f0e"
+linkColor = "#4044f0"
+greenColor = "#16a34a"
+orangeColor = "#d97706"
+redColor = "#dc2626"
+codeTextColor = "#4338ca"
+codeBackgroundColor = "#f4f4f6"
 
 [server]
 headless = true

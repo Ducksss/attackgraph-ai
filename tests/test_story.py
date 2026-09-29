@@ -76,8 +76,20 @@ def test_labels_are_escaped_in_every_fragment():
     assert "&lt;script&gt;" in web.path(story)
 
 
+def test_path_key_lists_only_the_line_styles_drawn():
+    _, story = flagship()
+    live = web.path(story, key=True)
+    assert "Established relationship" in live and "New in the proposal" in live
+    assert "Depends on an unknown condition" not in live and "Revoked" not in live.split('class="ag-key"')[1]
+    simulated = web.path(story, "simulated", key=True).split('class="ag-key"')[1]
+    assert "Revoked by the simulated fix" in simulated and "No longer reachable" in simulated
+    assert "Established relationship" not in simulated
+
+
 def test_no_em_dashes_in_visible_copy():
     root = Path(__file__).resolve().parents[1]
-    for path in (root / "app.py", root / "attackgraph" / "web.py", root / "attackgraph" / "story.py"):
+    sources = [root / "app.py", *sorted((root / "views").glob("*.py"))]
+    sources += [root / "attackgraph" / name for name in ("web.py", "story.py", "page.py", "landing.py")]
+    for path in sources:
         assert "—" not in path.read_text(), path
         assert not re.search("–", path.read_text()), path

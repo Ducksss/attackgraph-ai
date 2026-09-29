@@ -118,13 +118,11 @@ def change_card(comparison: Comparison, story: Story) -> str:
     }[delta.status]
     if delta.status == "added" and len(story.changes) > 1:
         intro = "The proposal flips these conditions."
-    glossary = web.PASSROLE_GLOSSARY if involves_pass_role(story) else ""
+    glossary = f"<div>{web.PASSROLE_GLOSSARY}</div>" if involves_pass_role(story) else ""
     return (
         web.card_head("difference", "The change", badge)
         + f'<p class="ag-note">{web.esc(intro)}</p>'
-        + web.change_block(story)
-        + extra
-        + glossary
+        + f'<div class="ag-split"><div>{web.change_block(story)}{extra}</div>{glossary}</div>'
     )
 
 
@@ -157,7 +155,7 @@ def path_card(story: Story, sim: FixCandidate | None = None) -> str:
             + ", ".join(f'<span class="ag-mono">{web.esc(i)}</span>' for i in ids)
             + " was false.</p>"
         )
-    return web.card_head("conversion_path", title) + f'<p class="ag-note">{web.esc(note)}</p>' + web.path(story, mode) + blocked
+    return web.card_head("conversion_path", title) + f'<p class="ag-note">{web.esc(note)}</p>' + web.path(story, mode, key=True) + blocked
 
 
 def conditions_card(story: Story) -> str:
@@ -171,13 +169,13 @@ def conditions_card(story: Story) -> str:
     return (
         web.card_head("checklist", title, f'<span class="ag-badge gray">{held} of {len(story.conditions)} hold</span>')
         + f'<p class="ag-note">{web.esc(lead)}</p>'
-        + web.conditions(story)
+        + web.conditions(story, two=True)
     )
 
 
 def ai_intro(model_id: str) -> str:
     return (
-        web.card_head("auto_awesome", "Why it matters", '<span class="ag-badge green">Amazon Bedrock</span>')
+        web.card_head("auto_awesome", "What this means", '<span class="ag-badge green">Amazon Bedrock</span>')
         + f'<p class="ag-note">{web.esc(model_name(model_id))} explains the evidence in plain English. It sees '
         "placeholder IDs only and cannot change the result.</p>"
     )
@@ -215,7 +213,7 @@ def expected_block(comparison: Comparison, sim: FixCandidate | None = None) -> s
         rows.append((expected_text(row.check, snapshot), row.result, after.result if after else None))
     if not rows:
         return ""
-    return '<p class="ag-note" style="margin-top:14px">Normal access the fix must keep:</p>' + web.expected_list(rows)
+    return '<p class="ag-label">Normal access the fix must keep</p>' + web.expected_list(rows)
 
 
 def fix_result(comparison: Comparison, delta: FindingDelta, sim: FixCandidate) -> str:
@@ -239,7 +237,7 @@ def fix_result(comparison: Comparison, delta: FindingDelta, sim: FixCandidate) -
         columns=2,
     ) + (
         '<p class="ag-note"><span class="ag-badge green">Verified in this model</span> The path is gone and every '
-        "relationship stayed resolved. The uploaded files are unchanged.</p>"
+        "relationship stayed resolved. The input files are unchanged.</p>"
         if verified
         else '<p class="ag-note"><span class="ag-badge amber">Not verified</span> The finding remains, or coverage became '
         "incomplete after the change.</p>"

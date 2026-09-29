@@ -23,6 +23,7 @@ _TO_WORKLOAD = {"iam_pass_role_to_lambda", "lambda_create_function", "lambda_inv
 class Condition:
     text: str
     state: str
+    key: str
     change: str | None  # "false → true" when the fact differs between the snapshots
     assumption: bool
     fact_id: str | None
@@ -114,6 +115,7 @@ def build_story(comparison: Comparison, delta: FindingDelta) -> Story:
         return Condition(
             text=condition_text(p.key, candidate, snapshot),
             state=p.state,
+            key=p.key,
             change=f"{change.before} → {change.after}" if change else None,
             assumption=p.assumption,
             fact_id=p.fact_id,

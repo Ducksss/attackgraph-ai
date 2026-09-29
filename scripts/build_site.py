@@ -1,8 +1,9 @@
-"""Build the static hosted page (deployed on Vercel) from the real engine.
+"""Build the static hosted site (deployed on Vercel) from the real engine.
 
 Streamlit needs a long-lived WebSocket server, which Vercel does not run, so
-this script renders the same sections for every bundled scenario into one
-static page. The scenario tabs and the fix simulation switch between
+this script renders the same sections as the app into two static pages: the
+landing page (why the tool is needed) at / and the live demo at /demo. On the
+demo page the scenario tabs and the fix simulation switch between
 pre-computed states in the browser.
 
 The hosted page makes no AI calls and accepts no uploads, as the PRD requires
@@ -12,7 +13,7 @@ still matches the freshly computed analysis. The other scenarios show the
 deterministic summary.
 
 Usage:
-    python scripts/build_site.py            # writes site/
+    python scripts/build_site.py            # writes site/index.html and site/demo/index.html
     python scripts/build_site.py OUT_DIR
 """
 
@@ -27,7 +28,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from attackgraph import ENGINE_VERSION, MODEL_VERSION, page, web  # noqa: E402
+from attackgraph import ENGINE_VERSION, MODEL_VERSION, landing, page, web  # noqa: E402
 from attackgraph.analysis import Finding  # noqa: E402
 from attackgraph.explain import DEFAULT_MODEL_ID, build_packet  # noqa: E402
 from attackgraph.render import step_text  # noqa: E402
@@ -42,52 +43,43 @@ esc = web.esc
 
 SITE_CSS = """
 <style>
-html, body { background: #000d01; color: #f2f5f2; margin: 0; }
-body { font-family: "DM Sans", system-ui, -apple-system, sans-serif; font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
-.ag-page { max-width: 1200px; margin: 0 auto; padding: 20px 24px 64px; box-sizing: border-box; }
-.ag-scard { background: var(--ag-surface); border: 1px solid var(--ag-line); border-radius: 8px; padding: 24px 24px 20px;
-  margin-top: 16px; box-sizing: border-box; min-width: 0; }
-.ag-scard.change { border-color: rgba(255, 194, 75, 0.35); }
-.ag-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 16px; align-items: start; }
-.ag-row.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.ag-switch { display: flex; flex-wrap: wrap; justify-content: center; margin: 4px auto 20px; width: fit-content; max-width: 100%;
-  border: 1px solid var(--ag-line); border-radius: 4px; overflow: hidden; }
-.ag-switch button { font: inherit; font-size: 15px; color: var(--ag-text); background: transparent; border: 0; border-right: 1px solid var(--ag-line);
+html, body { background: #f9f9fa; color: #111114; margin: 0; }
+body { font-family: "Inter", system-ui, -apple-system, sans-serif; font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+.ag-page { max-width: 1200px; margin: 0 auto; padding: 16px 24px 40px; box-sizing: border-box; }
+.ag-scard { background: var(--ag-surface); border: 1px solid var(--ag-line); border-radius: 12px; padding: 22px 22px 18px;
+  margin-top: 16px; box-sizing: border-box; min-width: 0; box-shadow: var(--ag-shadow); }
+.ag-switch { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin: 0 auto 14px; width: fit-content; max-width: 100%;
+  padding: 4px; border: 1px solid var(--ag-line); border-radius: 12px; background: var(--ag-surface); box-shadow: var(--ag-shadow); }
+.ag-switch button { font: inherit; font-size: 14.5px; color: var(--ag-body); background: transparent; border: 0; border-radius: 8px;
   padding: 7px 14px; cursor: pointer; }
-.ag-switch button:last-child { border-right: 0; }
-.ag-switch button:hover { background: rgba(255, 255, 255, 0.04); }
-.ag-switch button[aria-selected="true"] { color: var(--ag-green); background: var(--ag-green-soft); box-shadow: inset 0 0 0 1px var(--ag-green); }
-.ag-switch button:focus-visible { outline: 2px solid var(--ag-green); outline-offset: -2px; }
+.ag-switch button:hover { background: var(--ag-surface-2); }
+.ag-switch button[aria-selected="true"] { color: #fff; background: #1d1d20; }
+.ag-switch button:focus-visible { outline: 2px solid var(--ag-accent); outline-offset: 2px; }
 button.ag-btn { font-family: inherit; cursor: pointer; }
-.ag-btn .ag-icon { font-size: 19px; }
 .ag-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 .ag-sim-on, .ag-actions .ag-sim-on { display: none; }
 .ag-scenario[data-simulated="true"] .ag-sim-on { display: block; }
 .ag-scenario[data-simulated="true"] .ag-actions .ag-sim-on { display: inline-flex; }
 .ag-scenario[data-simulated="true"] .ag-sim-off { display: none; }
-.ag-recorded-meta { color: var(--ag-dim); font-size: 13px; margin-top: 6px; overflow-wrap: anywhere; }
-.ag-block-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
-pre.ag-json { background: #0a1f0e; color: #9fe8b4; border: 1px solid var(--ag-line); border-radius: 8px; padding: 12px 14px;
+pre.ag-json { background: var(--ag-surface-2); color: var(--ag-body); border: 1px solid var(--ag-line); border-radius: 10px; padding: 12px 14px;
   margin: 0 14px 14px; overflow: auto; max-height: 360px; font-family: var(--ag-mono); font-size: 12px; line-height: 1.5; white-space: pre; }
 pre.ag-json.flat { margin: 14px 0 0; max-height: none; }
-.ag-evidence { margin-top: 16px; border: 1px solid var(--ag-line); border-radius: 8px; background: rgba(255, 255, 255, 0.012); }
+.ag-evidence { margin-top: 16px; border: 1px solid var(--ag-line); border-radius: 12px; background: var(--ag-surface); box-shadow: var(--ag-shadow); }
 .ag-evidence > summary { cursor: pointer; list-style: none; padding: 14px 18px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
 .ag-evidence > summary::-webkit-details-marker { display: none; }
-.ag-evidence > summary .ag-icon { color: var(--ag-green); }
-.ag-evidence > summary:focus-visible { outline: 2px solid var(--ag-green); outline-offset: 2px; border-radius: 8px; }
+.ag-evidence > summary .ag-icon { color: var(--ag-accent); }
 .ag-evidence-body { padding: 0 18px 18px; }
 .ag-evidence h4 { font-size: 16px; font-weight: 600; margin: 20px 0 8px; }
 .ag-table-wrap { overflow-x: auto; }
 .ag-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .ag-table th { text-align: left; color: var(--ag-muted); font-weight: 500; white-space: nowrap; padding: 8px 10px; border-bottom: 1px solid var(--ag-line); }
-.ag-table td { padding: 8px 10px; border-bottom: 1px solid var(--ag-line); vertical-align: top; overflow-wrap: anywhere; }
-.ag-table code, .ag-list code { font-family: var(--ag-mono); font-size: 12.5px; color: #9fe8b4; }
+.ag-table td { padding: 8px 10px; border-bottom: 1px solid var(--ag-line-2); vertical-align: top; overflow-wrap: anywhere; }
+.ag-table code, .ag-list code { font-family: var(--ag-mono); font-size: 12.5px; color: #4338ca; }
 .ag-list { margin: 6px 0 0; padding-left: 18px; color: var(--ag-muted); font-size: 14px; }
 .ag-list li { margin: 4px 0; overflow-wrap: anywhere; }
-.ag-link { color: var(--ag-green); }
-.ag-hosted-note { color: var(--ag-dim); font-size: 13px; margin-top: 10px; }
-@media (max-width: 900px) { .ag-row, .ag-row.even { grid-template-columns: 1fr; } }
-@media (max-width: 640px) { .ag-page { padding: 12px 16px 48px; } .ag-switch button { padding: 7px 10px; font-size: 14px; } }
+.ag-link { color: var(--ag-accent-strong); }
+.ag-hosted-note { color: var(--ag-soft); font-size: 13px; line-height: 1.5; margin: 12px 0 0; }
+@media (max-width: 640px) { .ag-page { padding: 10px 14px 32px; } .ag-switch button { padding: 7px 10px; font-size: 14px; } }
 </style>
 """
 
@@ -145,49 +137,50 @@ def badge(tone: str, text: str) -> str:
 
 def load_recorded(path: Path, comparison) -> dict | None:
     """The recorded reply, only if it belongs to exactly this analysis and finding."""
-    if not path.exists():
-        return None
-    record = json.loads(path.read_text())
-    delta = comparison.deltas[0] if comparison.deltas else None
-    if delta is None or record.get("analysis_id") != comparison.analysis_id or record.get("finding_id") != delta.id:
-        return None
-    return record
+    return landing.load_recorded(comparison, path)
+
+
+def details(glyph: str, title: str, body: str) -> str:
+    return f'<details class="ag-gloss"><summary>{web.icon(glyph)}{esc(title)}</summary>{body}</details>'
 
 
 def ai_card(result, delta, story, recorded: dict | None) -> str:
     comparison = result.comparison
     packet = build_packet(comparison, delta, result.fixes)
     fix = next((f for f in result.fixes if f.removes(delta.id)), None)
-    plain = web.summary(summary(story, fix))
+    plain = " ".join(summary(story, fix))
     if recorded:
-        meta = (
-            f"{recorded['model_id']}, {recorded['region']}, request {recorded['request_id']}, "
-            f"{recorded['input_tokens']:,} in and {recorded['output_tokens']:,} out tokens, "
-            f"{recorded['latency_ms'] / 1000:.1f} s, {recorded['created_at']}, prompt {recorded['prompt_version']}"
-        )
-        body = (
-            f'<div class="ag-block-badges">{badge("green", "Recorded AI explanation")}</div>'
-            f'<div class="ag-recorded-meta">{esc(meta)}</div>'
-            f'<p class="ag-summary">{esc(recorded["summary"])}</p>'
+        text = (
+            badge("green", "Recorded AI explanation")
+            + f'<p class="ag-summary">{esc(recorded["summary"])}</p>'
             f'<p class="ag-note"><strong>Limitations:</strong> {esc(recorded["limitations"])}</p>'
-            '<p class="ag-hosted-note">This hosted page never calls Bedrock. The reply above was recorded from a live call '
-            "and checked claim by claim; run the app locally to generate a new one.</p>"
-            f'<details class="ag-gloss"><summary>{web.icon("rule")}Deterministic summary for comparison</summary>'
-            f'<p>{esc(" ".join(summary(story, fix)))}</p></details>'
+        )
+        side = (
+            web.meta_list(
+                [
+                    ("Model", recorded["model_id"]),
+                    ("Region", recorded["region"]),
+                    ("Request", recorded["request_id"]),
+                    ("Tokens", f"{recorded['input_tokens']:,} in, {recorded['output_tokens']:,} out"),
+                    ("Latency", f"{recorded['latency_ms'] / 1000:.1f} s"),
+                    ("Recorded", recorded["created_at"]),
+                    ("Prompt", recorded["prompt_version"]),
+                ]
+            )
+            + '<p class="ag-hosted-note">This hosted page never calls Bedrock. The reply was recorded from a live call and '
+            "checked claim by claim; run the app locally to generate a new one.</p>"
+            + details("rule", "Deterministic summary for comparison", f"<p>{esc(plain)}</p>")
         )
     else:
-        body = (
-            f'<div class="ag-block-badges">{badge("gray", "Deterministic summary, not AI-generated")}</div>'
-            + plain
-            + '<p class="ag-hosted-note">Live Amazon Bedrock explanations run in the local app. The hosted page makes no '
-            "AI calls.</p>"
+        text = badge("gray", "Deterministic summary, not AI-generated") + f'<p class="ag-summary">{esc(plain)}</p>'
+        side = (
+            '<p class="ag-hosted-note" style="margin-top:0">Live Amazon Bedrock explanations run in the local app. The hosted '
+            "page makes no AI calls.</p>"
         )
-    packet_json = json.dumps(packet.payload, indent=1)
+    side += details("data_object", "What the model sees", f'<pre class="ag-json">{esc(json.dumps(packet.payload, indent=1))}</pre>')
     return (
         page.ai_intro(recorded["model_id"] if recorded else DEFAULT_MODEL_ID)
-        + body
-        + f'<details class="ag-gloss"><summary>{web.icon("data_object")}What the model sees</summary>'
-        f'<pre class="ag-json">{esc(packet_json)}</pre></details>'
+        + f'<div class="ag-split lead"><div>{text}</div><div>{side}</div></div>'
     )
 
 
@@ -205,13 +198,10 @@ def fix_card(result, delta, story) -> str:
         '<button type="button" class="ag-btn ag-btn-ghost ag-sim-on" data-action="reset">Reset simulation</button>'
         "</div>"
     )
-    return (
-        head
-        + page.fix_intro(chosen, best, story)
-        + buttons
-        + f'<div class="ag-sim-off">{page.expected_block(comparison)}</div>'
-        + f'<div class="ag-sim-on">{page.expected_block(comparison, chosen)}{page.fix_result(comparison, delta, chosen)}</div>'
-    )
+    left = page.fix_intro(chosen, best, story) + buttons + f'<div class="ag-sim-on">{page.fix_result(comparison, delta, chosen)}</div>'
+    before, after = page.expected_block(comparison), page.expected_block(comparison, chosen)
+    right = f'<div><div class="ag-sim-off">{before}</div><div class="ag-sim-on">{after}</div></div>' if before else ""
+    return head + f'<div class="ag-split"><div>{left}</div>{right}</div>'
 
 
 def condition_rows(candidate, comparison) -> str:
@@ -286,7 +276,7 @@ def evidence(result, delta, key: str) -> str:
         parts.append('<p class="ag-note">No fact changed between the snapshots.</p>')
 
     parts.append(
-        f'<h4>Full report</h4><p class="ag-note"><a class="ag-link" href="reports/{esc(key)}.md" download>Download the Markdown '
+        f'<h4>Full report</h4><p class="ag-note"><a class="ag-link" href="/reports/{esc(key)}.md" download>Download the Markdown '
         f"report</a> with every finding, pointer, coverage issue and assumption. Engine {esc(ENGINE_VERSION)}, model "
         f"{esc(MODEL_VERSION)}, analysis <code>{esc(comparison.analysis_id)}</code>.</p>"
     )
@@ -319,16 +309,14 @@ def scenario_panel(key: str, result, recorded: dict | None) -> str:
             else:
                 body += page.stats(result)
                 path = page.path_card(story)
-            body += (
-                f'<div class="ag-scard">{path}</div>'
-                '<div class="ag-row">'
-                f'<div class="ag-scard change">{page.change_card(comparison, story)}</div>'
-                f'<div class="ag-scard">{page.conditions_card(story)}</div></div>'
-                '<div class="ag-row even">'
-                f'<div class="ag-scard">{ai_card(result, delta, story, recorded if key == "passrole" else None)}</div>'
-                f'<div class="ag-scard">{fix_card(result, delta, story)}</div></div>'
-                + evidence(result, delta, key)
+            cards = (
+                path,
+                page.change_card(comparison, story),
+                page.conditions_card(story),
+                ai_card(result, delta, story, recorded if key == "passrole" else None),
+                fix_card(result, delta, story),
             )
+            body += "".join(f'<div class="ag-scard">{card}</div>' for card in cards) + evidence(result, delta, key)
     hidden = "" if key == "passrole" else " hidden"
     return (
         f'<section class="ag-scenario" id="sc-{esc(key)}" role="tabpanel" aria-labelledby="tab-{esc(key)}" '
@@ -352,11 +340,34 @@ def upload_panel() -> str:
     )
 
 
+HEAD = (
+    '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
+    '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+    "<title>{title}</title>\n"
+    '<meta name="description" content="AttackGraph AI finds new routes to admin roles and sensitive data in a proposed '
+    'cloud change, explains them with Amazon Bedrock, and proves the fix.">\n'
+    '<meta name="theme-color" content="#f9f9fa">\n'
+    f'<link rel="icon" href="{FAVICON}">\n'
+    '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700'
+    '&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">\n'
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0,0'
+    '&amp;display=block">\n'
+)
+
+
+def document(title: str, body: str, script: str = "") -> str:
+    return (
+        HEAD.replace("{title}", esc(title))
+        + f"{web.CSS}{landing.CSS}{SITE_CSS}</head>\n<body>\n<main class=\"ag-page\">{body}</main>\n{script}</body>\n</html>\n"
+    )
+
+
 def build(out: Path, recorded_path: Path = RECORDED) -> Path:
     results = {key: run_scenario(key) for key in SCENARIOS}
     flagship = results["passrole"].comparison
     recorded = load_recorded(recorded_path, flagship)
-    preview = web.path(build_story(flagship, flagship.deltas[0]), compact=True)
     tabs = "".join(
         f'<button type="button" role="tab" id="tab-{esc(key)}" aria-controls="sc-{esc(key)}" data-tab="{esc(key)}" '
         f'aria-selected="{"true" if key == "passrole" else "false"}" tabindex="{0 if key == "passrole" else -1}">{esc(label)}</button>'
@@ -364,62 +375,38 @@ def build(out: Path, recorded_path: Path = RECORDED) -> Path:
     )
     panels = "".join(scenario_panel(key, results[key], recorded) for key in SCENARIOS) + upload_panel()
     built = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    body = (
-        web.nav()
-        + web.hero(preview)
-        + web.statement()
-        + web.section_head(
-            "From a config diff to a proven fix",
-            "Each step can be checked against the input files.",
-            tag="How it works",
-            anchor="ag-how",
-            center=True,
-        )
-        + web.how_it_works()
-        + web.section_head(
-            "Watch one permission become an admin path",
-            "The real engine, run on bundled synthetic snapshots. Switch scenario to see the other outcomes.",
-            tag="Live demo",
-            anchor="ag-demo",
-            center=True,
-        )
+    note = (
+        f'<p class="ag-hosted-note">Static build of the bundled scenarios, generated {built} (UTC) by engine '
+        f"{esc(ENGINE_VERSION)}. No uploads, no AI calls, no tracking.</p>"
+    )
+    landing_body = landing.page(results["passrole"], hosted=True, recorded_path=recorded_path).replace("</footer>", note + "</footer>")
+    demo_body = (
+        web.nav(web.DEMO)
+        + landing.demo_header()
         + f'<div class="ag-switch" role="tablist" aria-label="Scenario">{tabs}</div>'
         + panels
-        + '<div class="ag-section"></div>'
-        + web.trust()
-        + web.footer()
-        + f'<p class="ag-hosted-note">Static build of the bundled scenarios, generated {built} by engine {esc(ENGINE_VERSION)}. '
-        "No uploads, no AI calls, no tracking.</p>"
-    )
-    document = (
-        '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
-        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-        "<title>AttackGraph AI: see what a permission change unlocks</title>\n"
-        '<meta name="description" content="AttackGraph AI finds new paths to admin roles and sensitive data in a proposed '
-        'cloud change, explains them with Amazon Bedrock, and proves the fix.">\n'
-        '<meta name="theme-color" content="#000d01">\n'
-        f'<link rel="icon" href="{FAVICON}">\n'
-        '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
-        '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
-        '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700'
-        '&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">\n'
-        '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0,0'
-        '&amp;display=block">\n'
-        f"{web.CSS}{SITE_CSS}</head>\n<body>\n<main class=\"ag-page\">{body}</main>\n{SCRIPT}</body>\n</html>\n"
+        + landing.footer(hosted=True).replace("</footer>", note + "</footer>")
     )
 
-    if out.exists():
-        shutil.rmtree(out)
+    # Replace only what this script generates; keep dotfiles such as the Vercel project link.
+    for generated in ("index.html", "vercel.json", "demo", "reports"):
+        target = out / generated
+        if target.is_dir():
+            shutil.rmtree(target)
+        elif target.exists():
+            target.unlink()
     (out / "reports").mkdir(parents=True)
-    (out / "index.html").write_text(document)
+    (out / "demo").mkdir()
+    (out / "index.html").write_text(document("AttackGraph AI: ship permission changes without shipping admin access", landing_body))
+    (out / "demo" / "index.html").write_text(document("Live demo: AttackGraph AI", demo_body, SCRIPT))
     for key, result in results.items():
         if result.ok:
-            report = build_report(result.comparison, result.fixes)
-            (out / "reports" / f"{key}.md").write_text(report)
+            (out / "reports" / f"{key}.md").write_text(build_report(result.comparison, result.fixes))
     (out / "vercel.json").write_text(
         json.dumps(
             {
                 "cleanUrls": True,
+                "trailingSlash": False,
                 "headers": [
                     {
                         "source": "/(.*)",
@@ -443,4 +430,8 @@ def build(out: Path, recorded_path: Path = RECORDED) -> Path:
 if __name__ == "__main__":
     target = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "site"
     index = build(target)
-    print(f"Wrote {index} ({index.stat().st_size:,} bytes) and {len(list((target / 'reports').glob('*.md')))} reports")
+    demo = target / "demo" / "index.html"
+    print(
+        f"Wrote {index} ({index.stat().st_size:,} bytes), {demo} ({demo.stat().st_size:,} bytes) "
+        f"and {len(list((target / 'reports').glob('*.md')))} reports"
+    )
