@@ -1,6 +1,25 @@
+# Theme after the Protex template: near-black green, DM Sans, green accent.
 [theme]
-base = "light"
-primaryColor = "#1d4ed8"
+base = "dark"
+primaryColor = "#53db78"
+backgroundColor = "#000d01"
+secondaryBackgroundColor = "#07190c"
+textColor = "#f2f5f2"
+borderColor = "#242424"
+dataframeBorderColor = "#242424"
+showWidgetBorder = true
+baseRadius = "8px"
+buttonRadius = "4px"
+font = "DM Sans:https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap, sans-serif"
+headingFont = "DM Sans:https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap, sans-serif"
+headingFontWeights = 500
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap, monospace"
+linkColor = "#53db78"
+greenColor = "#53db78"
+orangeColor = "#ffc24b"
+redColor = "#ff7a7a"
+codeTextColor = "#9fe8b4"
+codeBackgroundColor = "#0a1f0e"
 
 [server]
 headless = true

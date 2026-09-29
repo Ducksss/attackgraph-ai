@@ -1,41 +1,53 @@
 # AttackGraph AI
 
-See how a proposed cloud configuration change affects access to sensitive resources before deployment.
+**See what a cloud permission change unlocks, before you deploy it.**
 
-AttackGraph AI compares two synthetic AWS configuration snapshots and reports protected targets that become reachable under two explicit rules. It explains each change with Amazon Bedrock. A reviewer can inspect every prerequisite behind a finding, simulate revoking one permission on an in-memory copy of the proposal, and see whether the modelled risk disappears.
+![AttackGraph AI: the route one new permission opens, from the CI deploy user to the deployment admin role](docs/images/hero.png)
 
-This is a static, defensive review prototype. It never connects to the accounts the snapshots describe and never deploys or executes anything. Its only AWS call is the Bedrock request for explanation text.
+A pull request that widens one IAM permission can quietly let a build pipeline run code as an administrator. Code review sees the changed line. AttackGraph AI compares the current and proposed configuration, draws the exact route that line opens, explains it in plain English with Amazon Bedrock, and proves which single revocation closes it.
 
-## Status
+It is a static, defensive review prototype built for the AWS Build Beyond Student AI Demo Challenge 2026. It reads synthetic JSON snapshots, never connects to the accounts they describe, and never deploys or executes anything. Its only AWS call is the Bedrock request for explanation text.
 
-| Area | State on 29 September 2026 |
-|---|---|
-| Engine: validation, Rules A and B, comparison, fix simulation | Implemented. The automated suite passes (`pytest`). |
-| Streamlit workspace | Implemented. Checked in a local browser in the demo, incomplete-coverage, validation-error and AI-fallback states, and by headless `streamlit.testing` tests. |
-| Bedrock explanation | Live on 29 September 2026: Amazon Nova Pro returned 8 validated explanations out of 10 with prompt `explain-v1`, none with an unsupported access or fix claim ([evidence](docs/evidence/ac9-bedrock-review-2026-09-29.md)). The wording defects found in that run are fixed in `explain-v2`, which has not been run live yet. |
-| Demo video, hosting | Not started. |
+## The demo in three pictures
 
-## Quick start
+**1. One changed permission opens a route to the admin role.** The proposal lets the CI deploy user pass the deployment admin role to Lambda. The CI user can already create, invoke and control a Lambda function, so it can now run code as the admin role. In the baseline, that one fact was false and the route was blocked.
+
+![Verdict, key numbers and the new route in the live demo](docs/images/demo.png)
+
+**2. Amazon Bedrock explains it; the engine decides it.** Amazon Nova Pro writes the plain-English explanation from an evidence packet of placeholder IDs. It cannot add findings, change severity or invent fixes, and a reply that cites anything outside the packet is rejected.
+
+**3. Simulating the revocation closes the route and keeps normal work running.**
+
+![The route after the simulated fix: the revoked arrow is red and everything after it is faded](docs/images/fixed-path.png)
+
+<img src="docs/images/fix.png" alt="Fix card: high-risk paths 1 to 0, normal access 2 of 2, verified in this model" width="440">
+
+## Run it in one minute
 
 Python 3.11 or newer.
 
 ```bash
-python3 -m venv .venv
-```
-
-```bash
-.venv/bin/pip install -r requirements.txt
-```
-
-```bash
-.venv/bin/python -m pytest
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
 
 ```bash
 .venv/bin/streamlit run app.py
 ```
 
-Open http://localhost:8501, choose **Load demo**, then **Compare changes**.
+Open http://localhost:8501. The flagship demo runs as soon as the page loads, so the result is visible without a click. The other scenarios open from the switcher or by link: `?scenario=repair`, `?scenario=unknown`, `?scenario=invalid` and `?scenario=upload`.
+
+```bash
+.venv/bin/python -m pytest
+```
+
+## Status
+
+| Area | State on 30 September 2026 |
+|---|---|
+| Engine: validation, Rules A and B, comparison, fix simulation | Implemented. The automated suite passes (`pytest`). |
+| Streamlit page | Reskinned after the [Protex](https://protex-template.webflow.io/) template. Checked in a browser at desktop and phone widths in every scenario, and by headless `streamlit.testing` tests. |
+| Bedrock explanation | Live on 29 September 2026: Amazon Nova Pro returned 8 validated explanations out of 10 with prompt `explain-v1`, none with an unsupported access or fix claim ([evidence](docs/evidence/ac9-bedrock-review-2026-09-29.md)). The wording defects found in that run are fixed in `explain-v2`, which has not been run live yet. |
+| Demo video, hosting | Not started. |
 
 ## Amazon Bedrock
 
@@ -63,14 +75,14 @@ Sends the demo finding through the real pipeline ten times (chargeable, each cal
 
 ## Demo script
 
-1. The question: does this proposed permission change create new access to a privileged role?
-2. **Load demo** (scenario "PassRole change"). Point at the synthetic-data labels on both snapshot cards.
-3. **Compare changes**. High-risk findings go from 0 to 1 with complete coverage. The only changed fact is `f-ci-pass-deploy-admin` (false → true). Every other Rule B prerequisite was already true.
-4. **Explain with Amazon Bedrock**. Match each claim to the evidence table above it.
-5. **Simulate fix** on the verified candidate. High-risk findings return to 0, both expected-access checks still pass, and the panel says "Verified in this model".
-6. Close with the boundary: the prototype verifies this explicit model; wider AWS policy coverage is future work.
+1. Open the page. The hero states the question and already shows the route the flagship change opens.
+2. **See the demo** jumps to the live result: "1 new path to a protected role", high-risk paths 0 to 1, coverage complete.
+3. **The path it opens**: CI deploy user, then the post-build hook function, then the deployment admin role. The amber arrow is the one new permission. **Why the route works** lists all 7 conditions and marks the changed one.
+4. **Explain with Amazon Bedrock**. Match each claim to the conditions card.
+5. **Simulate the fix**. The arrow turns red and dashed, high-risk paths go from 1 to 0, normal access stays at 2 of 2, and the card says "Verified in this model".
+6. Close on **Trust and limits**: synthetic data only. The prototype verifies this explicit model; wider AWS policy coverage is future work.
 
-The other bundled scenarios show the proposal-versus-repair comparison, incomplete coverage from an unknown fact, and field-level validation errors.
+The other scenarios show a comparison that closes the path, an unknown fact that makes the result incomplete rather than safe, and field-level validation errors.
 
 ## How it works
 
@@ -180,7 +192,9 @@ Local execution plus a recorded video is the intended submission. If you host it
 ## Layout
 
 ```text
-app.py                         Streamlit workspace
+app.py                         Streamlit page: story layout, scenario switching, uploads
+attackgraph/story.py           plain-language view of one finding (path, conditions, changes)
+attackgraph/web.py             Protex-style CSS and escaped HTML fragments
 attackgraph/snapshot.py        records, parsing, validation
 attackgraph/snapshot.schema.json
 attackgraph/analysis.py        Rule A/B candidates, coverage, witnesses (NetworkX)
@@ -193,5 +207,6 @@ fixtures/demo/                 baseline, proposed, repaired
 fixtures/examples/             unknown fact, unresolved SCP, label injection, invalid files
 scripts/check_bedrock.py       Bedrock access and AC-9 evidence
 docs/evidence/                 recorded live Bedrock runs and their review
+docs/images/                   README screenshots of the running app
 tests/                         automated suite
 ```

@@ -45,10 +45,10 @@ def dot_string(text: str) -> str:
 
 
 KIND_FILL = {
-    "principal": "#e0ecff",
-    "role": "#efe7ff",
-    "lambda": "#e6f6ec",
-    "s3_object": "#fff4dc",
+    "principal": "#0b2414",
+    "role": "#0f1f24",
+    "lambda": "#12240f",
+    "s3_object": "#241f10",
 }
 RULE_SHORT = {RULE_S3: "Rule A: reads", "lambda_pass_role": "Rule B: runs code as"}
 
@@ -65,9 +65,9 @@ def witness_dot(analysis: SnapshotAnalysis, witness: tuple[Candidate, ...], chan
     direction = "LR" if len(witness) <= 2 else "TB"
     lines = [
         "digraph witness {",
-        f'rankdir={direction}; bgcolor="white"; pad=0.3; nodesep=0.5; ranksep=1.1;',
-        'node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=14, color="#98a2b3", penwidth=1.2, margin="0.22,0.12"];',
-        'edge [fontname="Helvetica", fontsize=12, color="#475467", fontcolor="#344054", arrowsize=0.9];',
+        f'rankdir={direction}; bgcolor="transparent"; pad=0.3; nodesep=0.5; ranksep=1.1;',
+        'node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=14, color="#2b3a2e", fontcolor="#f2f5f2", penwidth=1.2, margin="0.22,0.12"];',
+        'edge [fontname="Helvetica", fontsize=12, color="#53db78", fontcolor="#a7aea8", arrowsize=0.9];',
     ]
     order = list(dict.fromkeys(n for c in witness for n in (c.subject, c.target)))
     for node_id in order:
@@ -77,7 +77,7 @@ def witness_dot(analysis: SnapshotAnalysis, witness: tuple[Candidate, ...], chan
         if target:
             tags.append("PROTECTED: " + target.classification.replace("_", " "))
         label = "\\n".join([dot_string(node_id), dot_string(" · ".join(tags)), dot_string(truncate(node.label))])
-        border = ', color="#b42318", penwidth=2.2' if target else ""
+        border = ', color="#ffc24b", penwidth=2.2' if target else ""
         lines.append(f'"{node_id}" [label="{label}", fillcolor="{KIND_FILL[node.kind]}"{border}];')
     for step, candidate in enumerate(witness, start=1):
         parts = [f"{step}. {RULE_SHORT[candidate.rule]}"]
@@ -86,7 +86,7 @@ def witness_dot(analysis: SnapshotAnalysis, witness: tuple[Candidate, ...], chan
         changed = sorted(set(candidate.fact_ids) & changed_fact_ids)
         if changed:
             parts.append("CHANGED: " + ", ".join(changed))
-        style = ', color="#b42318", fontcolor="#b42318", penwidth=2.4' if changed else ""
+        style = ', color="#ffc24b", fontcolor="#ffc24b", penwidth=2.4' if changed else ""
         if candidate.state != "true":
             style += ', style="dashed"'
         label = "\\n".join(dot_string(p) for p in parts)

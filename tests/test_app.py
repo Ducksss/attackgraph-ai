@@ -1,4 +1,4 @@
-"""AC-11: the Streamlit workflow, driven headlessly with streamlit.testing."""
+"""AC-11: the Streamlit page, driven headlessly with streamlit.testing."""
 
 import pytest
 from helpers import ROOT
@@ -9,16 +9,34 @@ from attackgraph.explain import BedrockExplainer, configured_model
 
 
 @pytest.fixture
-def app(monkeypatch):
+def hidden_credentials(monkeypatch):
     for name in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_PROFILE"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", "/nonexistent")
     monkeypatch.setenv("AWS_CONFIG_FILE", "/nonexistent")
     monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "true")
+
+
+def start(scenario: str | None = None) -> AppTest:
     at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=30)
+    if scenario:
+        at.query_params["scenario"] = scenario
     at.run()
-    assert not at.exception
+    assert not at.exception, at.exception
     return at
+
+
+@pytest.fixture
+def app(hidden_credentials):
+    return start()
+
+
+def html(at: AppTest) -> str:
+    return " ".join(str(e.proto.body) for e in at.get("html"))
+
+
+def texts(elements) -> str:
+    return " ".join(str(e.value) for e in elements)
 
 
 def click(at: AppTest, label: str) -> AppTest:
@@ -27,66 +45,65 @@ def click(at: AppTest, label: str) -> AppTest:
     return at
 
 
-def texts(elements) -> str:
-    return " ".join(str(e.value) for e in elements)
+def test_first_visit_runs_the_flagship_demo_without_clicks(app):
+    page = html(app)
+    assert "See what a permission change unlocks" in page
+    assert "1 new path to a protected role" in page
+    assert ">New</span><div class=\"ag-hop-text\">can pass Deployment admin role to</div>" in page
+    assert "Why the route works" in page and "7 of 7 hold" in page
 
 
-def load_and_compare(at: AppTest, scenario: str = "passrole") -> AppTest:
-    at.selectbox(key="scenario").set_value(scenario).run()
-    click(at, "Load demo")
-    return click(at, "Compare changes")
+def test_scenarios_switch_without_a_compare_step(app):
+    app.segmented_control(key="scenario").set_value("unknown").run()
+    page = html(app)
+    assert "Analysis incomplete" in page and "0 confirmed" in page and ">Unknown</span>" in page
+    assert "1 new path" not in page
+
+    app.segmented_control(key="scenario").set_value("invalid").run()
+    page = html(app)
+    assert "These files can&#x27;t be analysed yet" in page or "These files can't be analysed yet" in page
+    assert "3 field errors found" in page and "r-missing-role" in page
+
+    app.segmented_control(key="scenario").set_value("repair").run()
+    page = html(app)
+    assert "The change closes 1 path and opens none" in page and ">Removed</span>" in page
+
+    app.segmented_control(key="scenario").set_value("upload").run()
+    assert "Add both snapshot files" in html(app)
 
 
-def test_first_run_state_explains_what_to_do(app):
-    assert "Nothing loaded yet" in texts(app.info)
+def test_deep_link_opens_a_scenario(hidden_credentials):
+    assert "Analysis incomplete" in html(start("unknown"))
 
 
-def test_demo_flow_compare_inspect_explain_simulate(app):
-    load_and_compare(app)
-    assert "1 new high-risk finding in the proposal." in texts(app.error)
-    metrics = {m.label: m.value for m in app.metric}
-    assert metrics["Baseline high-risk"] == "0" and metrics["Proposed high-risk"] == "1"
-    markdown = texts(app.markdown)
-    assert "f-ci-pass-deploy-admin" in markdown and "changed false → true" in markdown
-
-    # AI explanation with a fake client: generated, labelled and translated to real IDs.
+def test_bedrock_explanation_is_labelled_and_translated(app):
     model_id, region = configured_model()
     app.session_state["explainer"] = BedrockExplainer(model_id, region, client=FakeClient())
     click(app, "Explain with Amazon Bedrock")
-    markdown = texts(app.markdown)
-    assert "AI explanation: Amazon Bedrock" in markdown and "req-123" in markdown
-
-    click(app, "Simulate fix")
-    assert "Verified in this model" in texts(app.success)
-    metrics = {m.label: m.value for m in app.metric}
-    assert metrics["Simulated fix high-risk"] == "0"
-    click(app, "Reset simulation")
-    assert {m.label: m.value for m in app.metric}["Simulated fix high-risk"] == "-"
+    markdown = texts(app.markdown).replace("\\", "")  # compare the rendered text, not the Markdown escapes
+    assert "AI explanation" in markdown and "req-123" in markdown
+    assert "f-ci-pass-deploy-admin" in markdown
 
 
-def test_ai_failure_keeps_results_and_shows_template(app):
-    load_and_compare(app)
+def test_bedrock_failure_keeps_results_and_shows_the_deterministic_summary(app):
     click(app, "Explain with Amazon Bedrock")
     assert "AI explanation unavailable" in texts(app.warning)
-    assert "Template summary: deterministic, not AI-generated" in texts(app.markdown)
-    assert "1 new high-risk finding in the proposal." in texts(app.error)
+    assert "Deterministic summary, not AI-generated" in texts(app.markdown)
+    assert "1 new path to a protected role" in html(app)
 
 
-def test_incomplete_scenario_is_never_safe(app):
-    load_and_compare(app, "unknown")
-    assert "Analysis incomplete." in texts(app.warning)
-    assert not any("No new modelled high-risk access" in str(s.value) for s in app.success)
+def test_simulated_fix_closes_the_path_and_reset_restores_it(app):
+    click(app, "Simulate the fix")
+    page = html(app)
+    assert "Verified in this model" in page and ">Revoked</span>" in page
+    assert "after simulated fix 0" in page and "1 → 0" in page
+    click(app, "Reset simulation")
+    assert ">Revoked</span>" not in html(app)
 
 
-def test_invalid_scenario_blocks_analysis(app):
-    load_and_compare(app, "invalid")
-    errors = texts(app.error)
-    assert "3 validation errors." in errors and "Analysis not run" in errors
-    assert not app.metric
-
-
-def test_reset_clears_everything(app):
-    load_and_compare(app)
-    click(app, "Reset app")
-    assert "Nothing loaded yet" in texts(app.info)
-    assert not app.metric
+def test_start_over_clears_simulations_and_returns_to_the_flagship_demo(app):
+    click(app, "Simulate the fix")
+    assert ">Revoked</span>" in html(app)
+    click(app, "Start over")
+    page = html(app)
+    assert "1 new path to a protected role" in page and ">Revoked</span>" not in page
