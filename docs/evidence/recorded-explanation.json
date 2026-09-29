@@ -1,0 +1,25 @@
+{
+  "source": "docs/evidence/ac9-bedrock-review-2026-09-29.md, run 8",
+  "model_id": "apac.amazon.nova-pro-v1:0",
+  "region": "ap-southeast-1",
+  "prompt_version": "explain-v1",
+  "analysis_id": "56bc16da787997e8",
+  "finding_id": "finding/p-ci-deployer/r-deploy-admin/privileged_role_use",
+  "request_id": "410472bd-679f-43a1-a1a1-783459e321b7",
+  "input_tokens": 1573,
+  "output_tokens": 235,
+  "latency_ms": 1644,
+  "created_at": "2026-09-29T15:30:44Z",
+  "evidence_ids": [
+    "f-ci-pass-deploy-admin",
+    "f-ci-create-build-hook",
+    "f-ci-invoke-build-hook",
+    "f-ci-controls-build-hook-code",
+    "f-deploy-admin-trusts-lambda",
+    "same-account check",
+    "policy-controls check"
+  ],
+  "cited_fix": "revoke/f-ci-pass-deploy-admin",
+  "summary": "The proposed configuration allows p-ci-deployer to pass the privileged role r-deploy-admin to the Lambda workload l-build-hook, enabling p-ci-deployer to run code with r-deploy-admin's permissions. This is due to the addition of the iam_pass_role_to_lambda permission (f-ci-pass-deploy-admin) from p-ci-deployer to r-deploy-admin via l-build-hook. The fix candidate revoke/f-ci-pass-deploy-admin, which removes this permission, successfully eliminates the finding without affecting existing access as verified by checks ea-ci-reads-build-artifacts and ea-ci-deploys-app-runtime.",
+  "limitations": "This analysis is based on a synthetic model. No actual AWS resources were modified, and the results do not reflect the current state of any AWS account. The scenario assumes p-ci-deployer is controlled by the change proposer and that p-ci-deployer controls the Lambda function's code (f-ci-controls-build-hook-code)."
+}

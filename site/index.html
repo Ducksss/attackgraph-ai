@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AttackGraph AI: see what a permission change unlocks</title>
+<meta name="description" content="AttackGraph AI finds new paths to admin roles and sensitive data in a proposed cloud change, explains them with Amazon Bedrock, and proves the fix.">
+<meta name="theme-color" content="#000d01">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2353db78'/%3E%3Cpath d='M9 10h9a4 4 0 0 1 0 8h-4a4 4 0 0 0 0 8h9' fill='none' stroke='%23032b0c' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0,0&amp;display=block">
+
+<style>
+:root {
+  --ag-bg: #000d01;
+  --ag-surface: #04130a;
+  --ag-surface-2: #061a0c;
+  --ag-line: #242424;
+  --ag-line-2: #2b3a2e;
+  --ag-text: #f2f5f2;
+  --ag-muted: #a7aea8;
+  --ag-dim: #748076;
+  --ag-green: #53db78;
+  --ag-green-fill: rgba(83, 219, 120, 0.3);
+  --ag-green-soft: rgba(83, 219, 120, 0.08);
+  --ag-amber: #ffc24b;
+  --ag-amber-soft: rgba(255, 194, 75, 0.1);
+  --ag-red: #ff7a7a;
+  --ag-red-soft: rgba(255, 122, 122, 0.1);
+  --ag-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+[data-testid="stHeader"] { background: transparent; }
+[data-testid="stMainBlockContainer"] { max-width: 1200px; padding-top: 1.25rem; padding-bottom: 4rem; }
+[data-testid="stHeaderActionElements"] { display: none; }
+[data-testid="stMarkdownContainer"] code { overflow-wrap: anywhere; white-space: pre-wrap; }
+[data-testid="stMarkdownContainer"] table { width: 100%; }
+[data-testid="stMarkdownContainer"] th { white-space: nowrap; vertical-align: bottom; }
+[data-testid="stMarkdownContainer"] td { overflow-wrap: break-word; vertical-align: top; }
+
+.ag-icon {
+  font-family: "Material Symbols Rounded"; font-weight: normal; font-style: normal; font-size: 20px;
+  line-height: 1; letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap;
+  direction: ltr; -webkit-font-smoothing: antialiased; font-feature-settings: "liga"; vertical-align: middle;
+}
+
+.ag-nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 4px 0 16px; }
+.ag-brand { display: flex; align-items: center; gap: 10px; color: var(--ag-text) !important; text-decoration: none !important;
+  font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; font-size: 15px; }
+.ag-logo { width: 34px; height: 34px; border-radius: 6px; background: var(--ag-green); color: #03250c; display: grid; place-items: center; }
+.ag-logo .ag-icon { font-size: 22px; }
+.ag-links { display: flex; gap: 2px; border: 1px solid var(--ag-line); border-radius: 4px; padding: 4px; }
+.ag-links a { color: var(--ag-text) !important; text-decoration: none !important; padding: 6px 14px; border-radius: 4px; font-size: 15px; }
+.ag-links a:hover { background: rgba(255, 255, 255, 0.05); }
+
+.ag-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 4px; font-weight: 500;
+  font-size: 16px; line-height: 24px; text-decoration: none !important; white-space: nowrap;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease; }
+.ag-btn-primary { background: var(--ag-green-fill); border: 1px solid var(--ag-green); color: #fff !important; }
+.ag-btn-primary:hover { background: rgba(83, 219, 120, 0.45); }
+.ag-btn-ghost { background: rgba(255, 255, 255, 0.02); border: 1px solid var(--ag-line); color: var(--ag-text) !important; }
+.ag-btn-ghost:hover { border-color: #3d4a3f; }
+.ag-btn:active { transform: translateY(1px); }
+.ag-btn:focus-visible, .ag-links a:focus-visible, .ag-brand:focus-visible, .ag-faq summary:focus-visible, .ag-gloss summary:focus-visible {
+  outline: 2px solid var(--ag-green); outline-offset: 2px; }
+
+.ag-hero { position: relative; overflow: hidden; text-align: center; border: 1px solid var(--ag-line); border-radius: 8px;
+  padding: 72px 24px 44px;
+  background:
+    radial-gradient(55% 60% at 50% 30%, rgba(83, 219, 120, 0.18), transparent 70%),
+    linear-gradient(rgba(83, 219, 120, 0.07) 1px, transparent 1px) 0 0 / 64px 64px,
+    linear-gradient(90deg, rgba(83, 219, 120, 0.07) 1px, transparent 1px) 0 0 / 64px 64px,
+    var(--ag-bg); }
+.ag-pill { display: inline-flex; align-items: center; gap: 8px; padding: 4px 14px; border: 1px solid var(--ag-green);
+  border-radius: 16px; font-size: 14px; color: var(--ag-text); background: rgba(0, 13, 1, 0.7); }
+.ag-pill .ag-icon { color: var(--ag-green); font-size: 18px; }
+.ag-hero h1 { font-size: clamp(34px, 3.7vw, 52px); line-height: 1.1; font-weight: 500; letter-spacing: -0.01em;
+  margin: 22px auto 14px; padding: 0; color: var(--ag-text); max-width: 1100px; }
+.ag-hero h1 .ag-soft { display: block; font-weight: 300; color: #dfe6df; }
+.ag-lead { font-size: 20px; line-height: 30px; color: var(--ag-muted); max-width: 620px; margin: 0 auto; }
+.ag-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 28px; }
+.ag-hero-path { margin: 40px auto 0; max-width: 880px; }
+
+.ag-statement { font-size: clamp(24px, 3vw, 38px); line-height: 1.35; font-weight: 400; text-align: center;
+  max-width: 920px; margin: 96px auto 40px; color: var(--ag-text); }
+.ag-statement span { color: #69746c; }
+
+.ag-section { margin: 72px 0 28px; scroll-margin-top: 32px; }
+.ag-section.center { text-align: center; }
+.ag-tag { display: inline-block; padding: 3px 11px; border: 1px solid var(--ag-green); border-radius: 4px; color: var(--ag-green);
+  font-size: 14px; font-weight: 600; }
+.ag-h2 { font-size: clamp(30px, 3.6vw, 46px); line-height: 1.15; font-weight: 500; margin: 14px 0 12px; padding: 0; color: var(--ag-text); }
+.ag-sub { color: var(--ag-muted); font-size: 18px; line-height: 28px; max-width: 680px; margin: 0; }
+.ag-section.center .ag-sub { margin: 0 auto; }
+
+.ag-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 8px; }
+.ag-card { background: var(--ag-line); padding: 1px; border-radius: 8px; }
+.ag-card-inner { background: rgba(0, 13, 1, 0.94); border-radius: 8px; padding: 32px 24px; height: 100%; box-sizing: border-box; }
+.ag-art { height: 132px; display: flex; align-items: center; justify-content: center; gap: 0; margin-bottom: 28px;
+  background: radial-gradient(50% 60% at 50% 50%, rgba(83, 219, 120, 0.12), transparent 70%); }
+.ag-tile { width: 54px; height: 54px; border-radius: 8px; border: 1px solid rgba(83, 219, 120, 0.55); color: var(--ag-green);
+  display: grid; place-items: center; background: linear-gradient(180deg, rgba(83, 219, 120, 0.2), rgba(83, 219, 120, 0.04));
+  box-shadow: 0 0 22px rgba(83, 219, 120, 0.14); }
+.ag-tile .ag-icon { font-size: 28px; }
+.ag-tile.big { width: 68px; height: 68px; }
+.ag-tile.big .ag-icon { font-size: 36px; }
+.ag-tile.warn { border-color: rgba(255, 194, 75, 0.6); color: var(--ag-amber);
+  background: linear-gradient(180deg, rgba(255, 194, 75, 0.18), rgba(255, 194, 75, 0.03)); box-shadow: 0 0 22px rgba(255, 194, 75, 0.12); }
+.ag-wire { width: 34px; height: 1px; background: rgba(83, 219, 120, 0.6); }
+.ag-card .ag-kicker { color: var(--ag-green); font-size: 14px; margin: 0 0 8px; }
+.ag-card h3 { font-size: 23px; line-height: 1.35; font-weight: 500; margin: 0 0 8px; padding: 0; color: var(--ag-text); }
+.ag-card p { color: var(--ag-muted); font-size: 16px; line-height: 1.6; margin: 0; }
+
+.ag-verdict { display: flex; gap: 16px; align-items: flex-start; border: 1px solid; border-radius: 8px; padding: 20px 24px; margin: 8px 0 16px; }
+.ag-verdict .ag-icon { font-size: 30px; margin-top: 2px; }
+.ag-verdict h3 { margin: 0; padding: 0; font-size: 24px; line-height: 1.3; font-weight: 500; color: var(--ag-text); }
+.ag-verdict p { margin: 6px 0 0; color: var(--ag-muted); font-size: 16px; line-height: 1.5; }
+.ag-verdict.risk { border-color: rgba(255, 194, 75, 0.55); background: var(--ag-amber-soft); }
+.ag-verdict.risk .ag-icon, .ag-verdict.unknown .ag-icon { color: var(--ag-amber); }
+.ag-verdict.unknown { border-color: rgba(255, 194, 75, 0.45); background: rgba(255, 194, 75, 0.06); }
+.ag-verdict.safe { border-color: rgba(83, 219, 120, 0.5); background: var(--ag-green-soft); }
+.ag-verdict.safe .ag-icon { color: var(--ag-green); }
+.ag-verdict.error { border-color: rgba(255, 122, 122, 0.55); background: var(--ag-red-soft); }
+.ag-verdict.error .ag-icon { color: var(--ag-red); }
+.ag-errors { margin: 10px 0 0; padding-left: 18px; color: var(--ag-text); }
+.ag-errors li { margin: 4px 0; overflow-wrap: anywhere; }
+.ag-errors code { font-family: var(--ag-mono); color: var(--ag-red); font-size: 13px; }
+
+.ag-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 8px; }
+.ag-stat { border: 1px solid var(--ag-line); border-radius: 8px; padding: 18px 20px; background: var(--ag-surface); }
+.ag-stat-label { color: var(--ag-muted); font-size: 14px; }
+.ag-stat-value { font-size: 30px; line-height: 1.2; font-weight: 500; margin-top: 6px; font-variant-numeric: tabular-nums; color: var(--ag-text); }
+.ag-stat-note { color: var(--ag-dim); font-size: 13px; margin-top: 4px; overflow-wrap: anywhere; }
+.ag-stat.risk .ag-stat-value { color: var(--ag-amber); }
+.ag-stat.good .ag-stat-value { color: var(--ag-green); }
+.ag-stats.two { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 16px 0 4px; }
+.ag-verdict.info { border-color: var(--ag-line-2); background: rgba(255, 255, 255, 0.015); }
+.ag-verdict.info .ag-icon { color: var(--ag-muted); }
+
+.ag-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.ag-card-head .ag-icon { color: var(--ag-green); font-size: 22px; }
+.ag-card-title { font-size: 22px; font-weight: 500; margin: 0; padding: 0; color: var(--ag-text); }
+.ag-note { color: var(--ag-muted); font-size: 15px; line-height: 1.55; margin: 6px 0 0; }
+.ag-small { color: var(--ag-dim); font-size: 13px; }
+.ag-mono { font-family: var(--ag-mono); font-size: 13px; color: #9fe8b4; overflow-wrap: anywhere; }
+.ag-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; border-radius: 4px; padding: 2px 8px;
+  border: 1px solid; white-space: nowrap; }
+.ag-badge.new { color: #221700; background: var(--ag-amber); border-color: var(--ag-amber); }
+.ag-badge.green { color: var(--ag-green); border-color: rgba(83, 219, 120, 0.6); background: var(--ag-green-soft); }
+.ag-badge.amber { color: var(--ag-amber); border-color: rgba(255, 194, 75, 0.6); background: var(--ag-amber-soft); }
+.ag-badge.red { color: var(--ag-red); border-color: rgba(255, 122, 122, 0.6); background: var(--ag-red-soft); }
+.ag-badge.gray { color: var(--ag-muted); border-color: var(--ag-line-2); }
+
+.ag-change { border: 1px solid rgba(255, 194, 75, 0.55); background: var(--ag-amber-soft); border-radius: 8px; padding: 14px 16px; margin-top: 14px; }
+.ag-change-text { font-size: 17px; line-height: 1.45; color: var(--ag-text); }
+.ag-flip { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; font-family: var(--ag-mono); font-size: 13px; }
+.ag-flip .from { color: var(--ag-muted); text-decoration: line-through; }
+.ag-flip .to { color: var(--ag-amber); font-weight: 600; }
+.ag-gloss { margin-top: 14px; border: 1px solid var(--ag-line); border-radius: 8px; }
+.ag-gloss summary { cursor: pointer; padding: 10px 14px; color: var(--ag-text); font-size: 15px; list-style: none; display: flex; align-items: center; gap: 8px; }
+.ag-gloss summary::-webkit-details-marker { display: none; }
+.ag-gloss summary .ag-icon { color: var(--ag-green); font-size: 18px; }
+.ag-gloss p { margin: 0; padding: 0 14px 12px; color: var(--ag-muted); font-size: 15px; line-height: 1.55; }
+
+.ag-path { display: flex; align-items: stretch; flex-wrap: wrap; row-gap: 14px; margin: 16px 0 6px; }
+.ag-node { flex: 1 1 120px; min-width: 112px; max-width: 240px; border: 1px solid var(--ag-line-2); border-radius: 8px; padding: 12px 14px;
+  background: var(--ag-surface); box-sizing: border-box; }
+.ag-node-kind { display: flex; align-items: center; gap: 6px; color: var(--ag-muted); font-size: 12px; }
+.ag-node-kind .ag-icon { font-size: 18px; color: var(--ag-green); }
+.ag-node-label { font-size: 15px; line-height: 1.35; font-weight: 500; margin-top: 6px; color: var(--ag-text); overflow-wrap: anywhere; }
+.ag-node-id { font-family: var(--ag-mono); font-size: 11.5px; color: var(--ag-dim); margin-top: 4px; overflow-wrap: anywhere; }
+.ag-node.protected { border-color: rgba(255, 194, 75, 0.75); box-shadow: 0 0 0 1px rgba(255, 194, 75, 0.2), 0 0 26px rgba(255, 194, 75, 0.12); }
+.ag-node.protected .ag-node-kind, .ag-node.protected .ag-node-kind .ag-icon { color: var(--ag-amber); }
+.ag-node.faded, .ag-hop.faded { opacity: 0.42; }
+.ag-hop { flex: 1 1 84px; min-width: 72px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;
+  padding: 0 8px; text-align: center; }
+.ag-hop-text { font-size: 12.5px; line-height: 1.3; color: var(--ag-muted); margin-bottom: 7px; overflow-wrap: anywhere; }
+.ag-hop-badge { align-self: center; margin-bottom: 6px; font-size: 11px; padding: 1px 7px; }
+.ag-hop-line { height: 2px; background: var(--ag-green); position: relative; margin-right: 6px; }
+.ag-hop-line::after { content: ""; position: absolute; right: -7px; top: -5px; border-left: 8px solid var(--ag-green);
+  border-top: 6px solid transparent; border-bottom: 6px solid transparent; }
+.ag-hop.new .ag-hop-text { color: var(--ag-amber); font-weight: 600; }
+.ag-hop.new .ag-hop-line { background: var(--ag-amber); }
+.ag-hop.new .ag-hop-line::after { border-left-color: var(--ag-amber); }
+.ag-hop.cut .ag-hop-text { color: var(--ag-red); font-weight: 600; }
+.ag-hop.cut .ag-hop-line { background: repeating-linear-gradient(90deg, var(--ag-red) 0 6px, transparent 6px 11px); }
+.ag-hop.cut .ag-hop-line::after { border-left-color: var(--ag-red); }
+.ag-hop.maybe .ag-hop-line { background: repeating-linear-gradient(90deg, var(--ag-amber) 0 6px, transparent 6px 11px); }
+.ag-hop.maybe .ag-hop-line::after { border-left-color: var(--ag-amber); }
+@media (prefers-reduced-motion: no-preference) {
+  .ag-hop.new .ag-hop-line { animation: ag-pulse 2.6s ease-in-out infinite; }
+}
+@keyframes ag-pulse { 0%, 100% { box-shadow: 0 0 0 rgba(255, 194, 75, 0); } 50% { box-shadow: 0 0 12px rgba(255, 194, 75, 0.75); } }
+.ag-path.compact .ag-node { padding: 10px 12px; }
+.ag-path.compact .ag-node-id { display: none; }
+
+.ag-conds { list-style: none; padding: 0 !important; margin: 10px 0 0 !important; display: grid; gap: 8px; }
+.ag-conds li { margin: 0 !important; }
+.ag-cond { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--ag-line); border-radius: 8px;
+  background: rgba(255, 255, 255, 0.012); }
+.ag-cond > .ag-icon { font-size: 20px; margin-top: 1px; }
+.ag-cond.true > .ag-icon { color: var(--ag-green); }
+.ag-cond.false > .ag-icon { color: var(--ag-red); }
+.ag-cond.unknown > .ag-icon { color: var(--ag-amber); }
+.ag-cond.changed { border-color: rgba(255, 194, 75, 0.6); background: var(--ag-amber-soft); }
+.ag-cond-text { color: var(--ag-text); font-size: 15px; line-height: 1.45; overflow-wrap: anywhere; }
+.ag-cond-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.ag-step-title { font-size: 15px; font-weight: 600; margin: 18px 0 2px; color: var(--ag-text); }
+
+.ag-summary { color: var(--ag-text); font-size: 16px; line-height: 1.6; margin: 8px 0 0; }
+.ag-expect { list-style: none; padding: 0 !important; margin: 10px 0 0 !important; display: grid; gap: 6px; }
+.ag-expect li { margin: 0 !important; display: flex; gap: 8px; align-items: flex-start; color: var(--ag-text); font-size: 15px; line-height: 1.45; }
+.ag-expect li .ag-icon { font-size: 19px; color: var(--ag-green); margin-top: 1px; }
+.ag-expect li.fail .ag-icon { color: var(--ag-red); }
+.ag-expect li.inconclusive .ag-icon { color: var(--ag-amber); }
+[class*="st-key-agcard-"] { background: var(--ag-surface); border: 1px solid var(--ag-line); border-radius: 8px; padding: 24px 24px 20px; }
+.st-key-agcard-change { border-color: rgba(255, 194, 75, 0.35); }
+
+[data-testid="stBaseButton-primary"] { background: var(--ag-green-fill) !important; border: 1px solid var(--ag-green) !important; color: #fff !important; }
+[data-testid="stBaseButton-primary"]:hover { background: rgba(83, 219, 120, 0.45) !important; }
+[data-testid="stBaseButton-secondary"] { background: rgba(255, 255, 255, 0.02) !important; border: 1px solid var(--ag-line) !important; color: var(--ag-text) !important; }
+[data-testid="stBaseButton-secondary"]:hover { border-color: #3d4a3f !important; }
+[data-testid="stExpander"] details { border-color: var(--ag-line) !important; background: rgba(255, 255, 255, 0.012); }
+
+.ag-trust { scroll-margin-top: 32px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: start; }
+.ag-chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.ag-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid rgba(83, 219, 120, 0.6); border-radius: 16px;
+  font-size: 14px; color: var(--ag-text); }
+.ag-chip .ag-icon { color: var(--ag-green); font-size: 18px; }
+.ag-faq details { border: 1px solid var(--ag-line); border-radius: 8px; margin-bottom: 10px; background: rgba(255, 255, 255, 0.012); }
+.ag-faq summary { cursor: pointer; list-style: none; padding: 16px 20px; font-weight: 500; font-size: 16px; color: var(--ag-text);
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.ag-faq summary::-webkit-details-marker { display: none; }
+.ag-faq summary::after { content: "add"; font-family: "Material Symbols Rounded"; font-size: 22px; color: var(--ag-muted); font-feature-settings: "liga"; }
+.ag-faq details[open] summary::after { content: "remove"; }
+.ag-faq details p { margin: 0; padding: 0 20px 18px; color: var(--ag-muted); font-size: 15px; line-height: 1.6; }
+
+.ag-footer { margin-top: 88px; padding-top: 22px; border-top: 1px solid var(--ag-line); display: flex; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; color: var(--ag-dim); font-size: 14px; }
+
+@media (max-width: 900px) {
+  .ag-cards, .ag-trust { grid-template-columns: 1fr; }
+  .ag-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ag-links { display: none; }
+  .ag-hero { padding: 48px 16px 32px; }
+}
+@media (max-width: 640px) {
+  .ag-brand { letter-spacing: 0.06em; font-size: 13px; }
+  .ag-path { flex-direction: column; flex-wrap: nowrap; }
+  .ag-node { max-width: none; flex: none; }
+  .ag-hop { flex: none; flex-direction: row; align-items: center; justify-content: flex-start; gap: 12px; padding: 4px 0 4px 20px; text-align: left; min-height: 48px; }
+  .ag-hop-text { margin: 0; order: 3; }
+  .ag-hop-badge { order: 2; margin: 0; }
+  .ag-hop-line { width: 2px; height: 34px; margin: 0 0 8px; order: 1; flex: none; }
+  .ag-hop-line::after { right: -5px; top: auto; bottom: -8px; border-left: 6px solid transparent; border-right: 6px solid transparent;
+    border-top: 8px solid var(--ag-green); border-bottom: 0; }
+  .ag-hop.new .ag-hop-line::after, .ag-hop.maybe .ag-hop-line::after { border-left-color: transparent; border-top-color: var(--ag-amber); }
+  .ag-hop.cut .ag-hop-line::after { border-left-color: transparent; border-top-color: var(--ag-red); }
+  .ag-hop.cut .ag-hop-line { background: repeating-linear-gradient(180deg, var(--ag-red) 0 6px, transparent 6px 11px); }
+  .ag-hop.maybe .ag-hop-line { background: repeating-linear-gradient(180deg, var(--ag-amber) 0 6px, transparent 6px 11px); }
+}
+</style>
+
+<style>
+html, body { background: #000d01; color: #f2f5f2; margin: 0; }
+body { font-family: "DM Sans", system-ui, -apple-system, sans-serif; font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+.ag-page { max-width: 1200px; margin: 0 auto; padding: 20px 24px 64px; box-sizing: border-box; }
+.ag-scard { background: var(--ag-surface); border: 1px solid var(--ag-line); border-radius: 8px; padding: 24px 24px 20px;
+  margin-top: 16px; box-sizing: border-box; min-width: 0; }
+.ag-scard.change { border-color: rgba(255, 194, 75, 0.35); }
+.ag-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 16px; align-items: start; }
+.ag-row.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.ag-switch { display: flex; flex-wrap: wrap; justify-content: center; margin: 4px auto 20px; width: fit-content; max-width: 100%;
+  border: 1px solid var(--ag-line); border-radius: 4px; overflow: hidden; }
+.ag-switch button { font: inherit; font-size: 15px; color: var(--ag-text); background: transparent; border: 0; border-right: 1px solid var(--ag-line);
+  padding: 7px 14px; cursor: pointer; }
+.ag-switch button:last-child { border-right: 0; }
+.ag-switch button:hover { background: rgba(255, 255, 255, 0.04); }
+.ag-switch button[aria-selected="true"] { color: var(--ag-green); background: var(--ag-green-soft); box-shadow: inset 0 0 0 1px var(--ag-green); }
+.ag-switch button:focus-visible { outline: 2px solid var(--ag-green); outline-offset: -2px; }
+button.ag-btn { font-family: inherit; cursor: pointer; }
+.ag-btn .ag-icon { font-size: 19px; }
+.ag-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.ag-sim-on, .ag-actions .ag-sim-on { display: none; }
+.ag-scenario[data-simulated="true"] .ag-sim-on { display: block; }
+.ag-scenario[data-simulated="true"] .ag-actions .ag-sim-on { display: inline-flex; }
+.ag-scenario[data-simulated="true"] .ag-sim-off { display: none; }
+.ag-recorded-meta { color: var(--ag-dim); font-size: 13px; margin-top: 6px; overflow-wrap: anywhere; }
+.ag-block-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+pre.ag-json { background: #0a1f0e; color: #9fe8b4; border: 1px solid var(--ag-line); border-radius: 8px; padding: 12px 14px;
+  margin: 0 14px 14px; overflow: auto; max-height: 360px; font-family: var(--ag-mono); font-size: 12px; line-height: 1.5; white-space: pre; }
+pre.ag-json.flat { margin: 14px 0 0; max-height: none; }
+.ag-evidence { margin-top: 16px; border: 1px solid var(--ag-line); border-radius: 8px; background: rgba(255, 255, 255, 0.012); }
+.ag-evidence > summary { cursor: pointer; list-style: none; padding: 14px 18px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+.ag-evidence > summary::-webkit-details-marker { display: none; }
+.ag-evidence > summary .ag-icon { color: var(--ag-green); }
+.ag-evidence > summary:focus-visible { outline: 2px solid var(--ag-green); outline-offset: 2px; border-radius: 8px; }
+.ag-evidence-body { padding: 0 18px 18px; }
+.ag-evidence h4 { font-size: 16px; font-weight: 600; margin: 20px 0 8px; }
+.ag-table-wrap { overflow-x: auto; }
+.ag-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ag-table th { text-align: left; color: var(--ag-muted); font-weight: 500; white-space: nowrap; padding: 8px 10px; border-bottom: 1px solid var(--ag-line); }
+.ag-table td { padding: 8px 10px; border-bottom: 1px solid var(--ag-line); vertical-align: top; overflow-wrap: anywhere; }
+.ag-table code, .ag-list code { font-family: var(--ag-mono); font-size: 12.5px; color: #9fe8b4; }
+.ag-list { margin: 6px 0 0; padding-left: 18px; color: var(--ag-muted); font-size: 14px; }
+.ag-list li { margin: 4px 0; overflow-wrap: anywhere; }
+.ag-link { color: var(--ag-green); }
+.ag-hosted-note { color: var(--ag-dim); font-size: 13px; margin-top: 10px; }
+@media (max-width: 900px) { .ag-row, .ag-row.even { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .ag-page { padding: 12px 16px 48px; } .ag-switch button { padding: 7px 10px; font-size: 14px; } }
+</style>
+</head>
+<body>
+<main class="ag-page"><nav class="ag-nav" aria-label="Page"><a class="ag-brand" href="#ag-top"><span class="ag-logo"><span class="ag-icon " aria-hidden="true">conversion_path</span></span>AttackGraph AI</a><div class="ag-links"><a href="#ag-how">How it works</a><a href="#ag-trust">Trust and limits</a></div><a class="ag-btn ag-btn-primary" href="#ag-demo">See the demo</a></nav><section class="ag-hero" id="ag-top"><span class="ag-pill"><span class="ag-icon " aria-hidden="true">verified_user</span>Pre-deployment IAM review, explained by Amazon Bedrock</span><h1>See what a permission change unlocks<span class="ag-soft">before you deploy it</span></h1><p class="ag-lead">AttackGraph AI finds new paths to admin roles and sensitive data in a proposed cloud change, then proves the fix.</p><div class="ag-cta"><a class="ag-btn ag-btn-primary" href="#ag-demo">See the demo</a><a class="ag-btn ag-btn-ghost" href="#ag-how">How it works</a></div><div class="ag-hero-path"><div class="ag-path compact" role="img" aria-label="Route: CI deploy user (build pipeline) then Post-build hook function then Deployment admin role"><div class="ag-node"><div class="ag-node-kind"><span class="ag-icon " aria-hidden="true">person</span>Entry point</div><div class="ag-node-label">CI deploy user (build pipeline)</div><div class="ag-node-id">p-ci-deployer</div></div><div class="ag-hop new"><span class="ag-badge new ag-hop-badge">New</span><div class="ag-hop-text">can pass Deployment admin role to</div><div class="ag-hop-line"></div></div><div class="ag-node"><div class="ag-node-kind"><span class="ag-icon " aria-hidden="true">deployed_code</span>Lambda function</div><div class="ag-node-label">Post-build hook function</div><div class="ag-node-id">l-build-hook</div></div><div class="ag-hop "><div class="ag-hop-text">runs as</div><div class="ag-hop-line"></div></div><div class="ag-node protected"><div class="ag-node-kind"><span class="ag-icon " aria-hidden="true">admin_panel_settings</span>Protected role</div><div class="ag-node-label">Deployment admin role</div><div class="ag-node-id">r-deploy-admin</div></div></div></div></section><p class="ag-statement">One line in a pull request can turn a build pipeline into an administrator. <span>Reviewers see the line. AttackGraph AI shows the path it opens, and whether a fix closes it.</span></p><div class="ag-section center" id="ag-how"><span class="ag-tag">How it works</span><h2 class="ag-h2">From a config diff to a proven fix</h2><p class="ag-sub">Each step can be checked against the input files.</p></div><div class="ag-cards"><div class="ag-card"><div class="ag-card-inner"><div class="ag-art"><div class="ag-tile "><span class="ag-icon " aria-hidden="true">person</span></div><div class="ag-wire"></div><div class="ag-tile "><span class="ag-icon " aria-hidden="true">deployed_code</span></div><div class="ag-wire"></div><div class="ag-tile warn"><span class="ag-icon " aria-hidden="true">admin_panel_settings</span></div></div><p class="ag-kicker">Deterministic rules</p><h3>Map every route</h3><p>The engine links permissions into routes from an entry point to protected roles and data. A missing fact stays unknown, never safe.</p></div></div><div class="ag-card"><div class="ag-card-inner"><div class="ag-art"><div class="ag-tile "><span class="ag-icon " aria-hidden="true">data_object</span></div><div class="ag-wire"></div><div class="ag-tile big"><span class="ag-icon " aria-hidden="true">auto_awesome</span></div><div class="ag-wire"></div><div class="ag-tile "><span class="ag-icon " aria-hidden="true">notes</span></div></div><p class="ag-kicker">Amazon Bedrock</p><h3>Explain it in plain English</h3><p>Nova Pro writes a short explanation from anonymised evidence. It cannot add findings, change severity or invent fixes.</p></div></div><div class="ag-card"><div class="ag-card-inner"><div class="ag-art"><div class="ag-tile warn"><span class="ag-icon " aria-hidden="true">key_off</span></div><div class="ag-wire"></div><div class="ag-tile big"><span class="ag-icon " aria-hidden="true">verified_user</span></div></div><p class="ag-kicker">Proof, not advice</p><h3>Test the fix</h3><p>Revoke the new permission on a copy, rerun the analysis, and confirm the route is gone while normal access still works.</p></div></div></div><div class="ag-section center" id="ag-demo"><span class="ag-tag">Live demo</span><h2 class="ag-h2">Watch one permission become an admin path</h2><p class="ag-sub">The real engine, run on bundled synthetic snapshots. Switch scenario to see the other outcomes.</p></div><div class="ag-switch" role="tablist" aria-label="Scenario"><button type="button" role="tab" id="tab-passrole" aria-controls="sc-passrole" data-tab="passrole" aria-selected="true" tabindex="0">PassRole change</button><button type="button" role="tab" id="tab-repair" aria-controls="sc-repair" data-tab="repair" aria-selected="false" tabindex="-1">Proposed vs repaired</button><button type="button" role="tab" id="tab-unknown" aria-controls="sc-unknown" data-tab="unknown" aria-selected="false" tabindex="-1">Unknown fact</button><button type="button" role="tab" id="tab-invalid" aria-controls="sc-invalid" data-tab="invalid" aria-selected="false" tabindex="-1">Invalid file</button><button type="button" role="tab" id="tab-upload" aria-controls="sc-upload" data-tab="upload" aria-selected="false" tabindex="-1">Upload your own</button></div><section class="ag-scenario" id="sc-passrole" role="tabpanel" aria-labelledby="tab-passrole" data-scenario="passrole"><div class="ag-verdict risk" role="status"><span class="ag-icon " aria-hidden="true">warning</span><div><h3>1 new path to a protected role</h3><p>CI deploy user (build pipeline) can now run code as Deployment admin role. Nothing was deployed: this is a static check of two synthetic snapshots.</p></div></div><div class="ag-sim-off"><div class="ag-stats"><div class="ag-stat "><div class="ag-stat-label">Facts changed</div><div class="ag-stat-value">1</div><div class="ag-stat-note">f-ci-pass-deploy-admin</div></div><div class="ag-stat risk"><div class="ag-stat-label">New risky paths</div><div class="ag-stat-value">1</div><div class="ag-stat-note">Baseline 0, proposed 1</div></div><div class="ag-stat good"><div class="ag-stat-label">Coverage</div><div class="ag-stat-value">Complete</div><div class="ag-stat-note">Every relationship resolved</div></div><div class="ag-stat good"><div class="ag-stat-label">Verified fix</div><div class="ag-stat-value">1 revocation</div><div class="ag-stat-note">Normal access kept: 2 of 2</div></div></div></div><div class="ag-sim-on"><div class="ag-stats"><div class="ag-stat "><div class="ag-stat-label">Facts changed</div><div class="ag-stat-value">1</div><div class="ag-stat-note">f-ci-pass-deploy-admin</div></div><div class="ag-stat risk"><div class="ag-stat-label">New risky paths</div><div class="ag-stat-value">1</div><div class="ag-stat-note">Baseline 0, proposed 1, after simulated fix 0</div></div><div class="ag-stat good"><div class="ag-stat-label">Coverage</div><div class="ag-stat-value">Complete</div><div class="ag-stat-note">Every relationship resolved</div></div><div class="ag-stat good"><div class="ag-stat-label">Verified fix</div><div class="ag-stat-value">1 revocation</div><div class="ag-stat-note">Normal access kept: 2 of 2</div></div></div></div><div class="ag-scard"><div class="ag-sim-off"><div class="ag-card-head"><span class="ag-icon " aria-hidden="true">conversion_path</span><h3 class="ag-card-title">The path it opens</h3></div><p class="ag-note">CI deploy user (build pipeline) can now run code as Deployment admin role. Follow the arrows: each one is an established relationship.</p><div class="ag-path" role="img" aria-label="Route: CI deploy user (build pipeline) then Post-build hook function then Deployment admin role"><div class="ag-node"><div class="ag-node-kind"><span class="ag-icon " aria-hidden="true">person</span>Entry point</div><div class="ag-node-label">CI deploy user (build pipeline)</div><div class="ag-node-id">p-ci-deployer</div></div><div class="ag-hop new"><span class="ag-badge new ag-hop-badge">New</span><div class="ag-hop-text">can pass Deployment admin role to</div><div class="ag-hop-line"></div></div><div class="ag-node"><div class="ag-node-kind"><span class="ag-icon " aria-hidden="true">deployed_code</span>Lambda function</div><div class="ag-node-label">Post-build hook function</div><div class="ag-node-id">l-build-hook</div></div><div class="ag-hop "><div class="ag-hop-text">runs as</div><div class="ag-hop-line"></div></div><div class="ag-node protected"><div class="ag-node-kind"><span class="ag-icon " aria-hidden="true">admin_panel_settings</span>Protected role</div><div class="ag-node-label">Deployment admin role</div><div class="ag-node-id">r-deploy-admin</div></div></div><p class="ag-note">In the baseline the same route was blocked because <span class="ag-mono">f-ci-pass-deploy-admin</span> was false.</p></div><div class="ag-sim-on"><div class="ag-card-head"><span class="ag-icon " aria-hidden="true">conversion_path</span><h3 class="ag-card-title">The path, closed by the simulated fix</h3></div><p class="ag-note">f-ci-pass-deploy-admin is revoked on a copy of the proposal. The route no longer reaches the protected role.</p><div class="ag-path" role="img" aria-label="Route: CI deploy user (build pipeline) then Post-build hook function then Deployment admin role"><div class="ag-node"><div class="ag-node-kind"><span class="ag-icon " aria-hidden="true">person</span>Entry point</div><div class="ag-node-label">CI deploy user (build pipeline)</div><div class="ag-node-id">p-ci-deployer</div></div><div class="ag-hop cut"><span class="ag-badge red ag-hop-badge">Revoked</span><div class="ag-hop-text">can pass Deployment admin role to</div><div class="ag-hop-line"></div></div><div class="ag-node faded"><div class="ag-node-kind"><span class="ag-icon " aria-hidden="true">deployed_code</span>Lambda function</div><div class="ag-node-label">Post-build hook function</div><div class="ag-node-id">l-build-hook</div></div><div class="ag-hop faded"><div class="ag-hop-text">runs as</div><div class="ag-hop-line"></div></div><div class="ag-node protected faded"><div class="ag-node-kind"><span class="ag-icon " aria-hidden="true">admin_panel_settings</span>Protected role</div><div class="ag-node-label">Deployment admin role</div><div class="ag-node-id">r-deploy-admin</div></div></div><p class="ag-note">In the baseline the same route was blocked because <span class="ag-mono">f-ci-pass-deploy-admin</span> was false.</p></div></div><div class="ag-row"><div class="ag-scard change"><div class="ag-card-head"><span class="ag-icon " aria-hidden="true">difference</span><h3 class="ag-card-title">The change</h3><span class="ag-badge amber">New path</span></div><p class="ag-note">The proposal flips this condition. Nothing else on the route changed.</p><div class="ag-change"><div class="ag-change-text">CI deploy user (build pipeline) can pass Deployment admin role to Lambda</div><div class="ag-flip"><span class="from">false</span><span class="ag-icon " aria-hidden="true">arrow_forward</span><span class="to">true</span></div><div class="ag-small" style="margin-top:6px">Fact <span class="ag-mono">f-ci-pass-deploy-admin</span> at <span class="ag-mono">/facts/1</span></div></div><details class="ag-gloss"><summary><span class="ag-icon " aria-hidden="true">school</span>What is iam:PassRole?</summary><p>It is the permission to hand an IAM role to an AWS service. If someone can hand a powerful role to a Lambda function they write and run, their code runs with that role's permissions. That is why this one permission matters.</p></details></div><div class="ag-scard"><div class="ag-card-head"><span class="ag-icon " aria-hidden="true">checklist</span><h3 class="ag-card-title">Why the route works</h3><span class="ag-badge gray">7 of 7 hold</span></div><p class="ag-note">A route only counts when every condition holds. The changed one was the missing piece.</p><ul class="ag-conds"><li class="ag-cond true changed"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">CI deploy user (build pipeline) can pass Deployment admin role to Lambda</div><div class="ag-cond-meta"><span class="ag-badge new">Changed: false to true</span><span class="ag-mono">f-ci-pass-deploy-admin</span></div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">CI deploy user (build pipeline) can create Post-build hook function</div><div class="ag-cond-meta"><span class="ag-mono">f-ci-create-build-hook</span></div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">CI deploy user (build pipeline) can invoke Post-build hook function</div><div class="ag-cond-meta"><span class="ag-mono">f-ci-invoke-build-hook</span></div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">CI deploy user (build pipeline) controls the code Post-build hook function runs</div><div class="ag-cond-meta"><span class="ag-badge gray">Scenario assumption</span><span class="ag-mono">f-ci-controls-build-hook-code</span></div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">Deployment admin role trusts the Lambda service</div><div class="ag-cond-meta"><span class="ag-mono">f-deploy-admin-trusts-lambda</span></div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">Everything is in one AWS account</div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">No unresolved policy restrictions apply</div></div></li></ul></div></div><div class="ag-row even"><div class="ag-scard"><div class="ag-card-head"><span class="ag-icon " aria-hidden="true">auto_awesome</span><h3 class="ag-card-title">Why it matters</h3><span class="ag-badge green">Amazon Bedrock</span></div><p class="ag-note">Amazon Nova Pro explains the evidence in plain English. It sees placeholder IDs only and cannot change the result.</p><div class="ag-block-badges"><span class="ag-badge green">Recorded AI explanation</span></div><div class="ag-recorded-meta">apac.amazon.nova-pro-v1:0, ap-southeast-1, request 410472bd-679f-43a1-a1a1-783459e321b7, 1,573 in and 235 out tokens, 1.6 s, 2026-09-29T15:30:44Z, prompt explain-v1</div><p class="ag-summary">The proposed configuration allows p-ci-deployer to pass the privileged role r-deploy-admin to the Lambda workload l-build-hook, enabling p-ci-deployer to run code with r-deploy-admin&#x27;s permissions. This is due to the addition of the iam_pass_role_to_lambda permission (f-ci-pass-deploy-admin) from p-ci-deployer to r-deploy-admin via l-build-hook. The fix candidate revoke/f-ci-pass-deploy-admin, which removes this permission, successfully eliminates the finding without affecting existing access as verified by checks ea-ci-reads-build-artifacts and ea-ci-deploys-app-runtime.</p><p class="ag-note"><strong>Limitations:</strong> This analysis is based on a synthetic model. No actual AWS resources were modified, and the results do not reflect the current state of any AWS account. The scenario assumes p-ci-deployer is controlled by the change proposer and that p-ci-deployer controls the Lambda function&#x27;s code (f-ci-controls-build-hook-code).</p><p class="ag-hosted-note">This hosted page never calls Bedrock. The reply above was recorded from a live call and checked claim by claim; run the app locally to generate a new one.</p><details class="ag-gloss"><summary><span class="ag-icon " aria-hidden="true">rule</span>Deterministic summary for comparison</summary><p>CI deploy user (build pipeline) can now run code as Deployment admin role. The proposal changes one condition: CI deploy user (build pipeline) can pass Deployment admin role to Lambda (false to true). With it, all 7 conditions on this route hold. Revoking f-ci-pass-deploy-admin on a copy removes the path and keeps 2 of 2 normal access checks. Verified in this model. Nothing was deployed or executed.</p></details><details class="ag-gloss"><summary><span class="ag-icon " aria-hidden="true">data_object</span>What the model sees</summary><pre class="ag-json">{
+ &quot;analysis&quot;: {
+  &quot;model_version&quot;: &quot;attackgraph-rules-v1&quot;,
+  &quot;data&quot;: &quot;synthetic configuration JSON&quot;,
+  &quot;comparison&quot;: &quot;baseline versus proposed snapshot&quot;,
+  &quot;coverage_complete&quot;: true
+ },
+ &quot;finding&quot;: {
+  &quot;id&quot;: &quot;A1&quot;,
+  &quot;impact&quot;: &quot;privileged_role_use&quot;,
+  &quot;severity&quot;: &quot;High&quot;,
+  &quot;comparison_status&quot;: &quot;added&quot;,
+  &quot;provisional&quot;: false,
+  &quot;entry&quot;: &quot;P1&quot;,
+  &quot;target&quot;: &quot;R1&quot;,
+  &quot;target_classification&quot;: &quot;privileged_role&quot;,
+  &quot;baseline_state&quot;: &quot;unreachable&quot;,
+  &quot;proposal_state&quot;: &quot;reachable&quot;
+ },
+ &quot;nodes&quot;: [
+  {
+   &quot;alias&quot;: &quot;P1&quot;,
+   &quot;kind&quot;: &quot;principal&quot;
+  },
+  {
+   &quot;alias&quot;: &quot;R1&quot;,
+   &quot;kind&quot;: &quot;role&quot;
+  },
+  {
+   &quot;alias&quot;: &quot;L1&quot;,
+   &quot;kind&quot;: &quot;lambda&quot;
+  }
+ ],
+ &quot;witness&quot;: [
+  {
+   &quot;step&quot;: 1,
+   &quot;rule&quot;: &quot;lambda_pass_role&quot;,
+   &quot;from&quot;: &quot;P1&quot;,
+   &quot;to&quot;: &quot;R1&quot;,
+   &quot;via&quot;: &quot;L1&quot;,
+   &quot;state&quot;: &quot;true&quot;,
+   &quot;prerequisites&quot;: [
+    {
+     &quot;id&quot;: &quot;F1&quot;,
+     &quot;predicate&quot;: &quot;iam_pass_role_to_lambda&quot;,
+     &quot;subject&quot;: &quot;P1&quot;,
+     &quot;object&quot;: &quot;R1&quot;,
+     &quot;baseline_state&quot;: &quot;false&quot;,
+     &quot;proposal_state&quot;: &quot;true&quot;,
+     &quot;changed&quot;: true
+    },
+    {
+     &quot;id&quot;: &quot;F2&quot;,
+     &quot;predicate&quot;: &quot;lambda_create_function&quot;,
+     &quot;subject&quot;: &quot;P1&quot;,
+     &quot;object&quot;: &quot;L1&quot;,
+     &quot;baseline_state&quot;: &quot;true&quot;,
+     &quot;proposal_state&quot;: &quot;true&quot;,
+     &quot;changed&quot;: false
+    },
+    {
+     &quot;id&quot;: &quot;F3&quot;,
+     &quot;predicate&quot;: &quot;lambda_invoke_function&quot;,
+     &quot;subject&quot;: &quot;P1&quot;,
+     &quot;object&quot;: &quot;L1&quot;,
+     &quot;baseline_state&quot;: &quot;true&quot;,
+     &quot;proposal_state&quot;: &quot;true&quot;,
+     &quot;changed&quot;: false
+    },
+    {
+     &quot;id&quot;: &quot;F4&quot;,
+     &quot;predicate&quot;: &quot;controls_workload_code&quot;,
+     &quot;subject&quot;: &quot;P1&quot;,
+     &quot;object&quot;: &quot;L1&quot;,
+     &quot;baseline_state&quot;: &quot;true&quot;,
+     &quot;proposal_state&quot;: &quot;true&quot;,
+     &quot;changed&quot;: false,
+     &quot;scenario_assumption&quot;: true
+    },
+    {
+     &quot;id&quot;: &quot;F5&quot;,
+     &quot;predicate&quot;: &quot;role_trusts_lambda_service&quot;,
+     &quot;subject&quot;: &quot;R1&quot;,
+     &quot;baseline_state&quot;: &quot;true&quot;,
+     &quot;proposal_state&quot;: &quot;true&quot;,
+     &quot;changed&quot;: false
+    },
+    {
+     &quot;id&quot;: &quot;D1&quot;,
+     &quot;check&quot;: &quot;same_account&quot;,
+     &quot;state&quot;: &quot;true&quot;
+    },
+    {
+     &quot;id&quot;: &quot;D2&quot;,
+     &quot;check&quot;: &quot;policy_controls_resolved&quot;,
+     &quot;state&quot;: &quot;true&quot;
+    }
+   ]
+  }
+ ],
+ &quot;changed_facts&quot;: [
+  {
+   &quot;id&quot;: &quot;F1&quot;,
+   &quot;baseline_state&quot;: &quot;false&quot;,
+   &quot;proposal_state&quot;: &quot;true&quot;
+  }
+ ],
+ &quot;assumptions&quot;: [
+  &quot;P1 is treated as controlled by the party proposing the change (scenario assumption).&quot;,
+  &quot;Fact F4 is a scenario assumption, not an observed permission.&quot;
+ ],
+ &quot;fix_candidates&quot;: [
+  {
+   &quot;id&quot;: &quot;X1&quot;,
+   &quot;action&quot;: &quot;set this fact to false on an in-memory copy of the proposal&quot;,
+   &quot;revokes_fact&quot;: &quot;F1&quot;,
+   &quot;removes_this_finding&quot;: true,
+   &quot;verified_in_model&quot;: true,
+   &quot;coverage_complete_after&quot;: true,
+   &quot;high_risk_findings_after&quot;: 0,
+   &quot;expected_access_after&quot;: [
+    {
+     &quot;id&quot;: &quot;E1&quot;,
+     &quot;relationship&quot;: &quot;object_read&quot;,
+     &quot;before_fix&quot;: &quot;pass&quot;,
+     &quot;after_fix&quot;: &quot;pass&quot;
+    },
+    {
+     &quot;id&quot;: &quot;E2&quot;,
+     &quot;relationship&quot;: &quot;role_use&quot;,
+     &quot;before_fix&quot;: &quot;pass&quot;,
+     &quot;after_fix&quot;: &quot;pass&quot;
+    }
+   ]
+  }
+ ],
+ &quot;rules&quot;: {
+  &quot;s3_direct_read&quot;: &quot;Established when the subject has an effective s3:GetObject fact for the object and policy controls are resolved.&quot;,
+  &quot;lambda_pass_role&quot;: &quot;Established only when all are true for the same subject, role and workload: the subject can pass the role to Lambda, create and invoke the workload, and controls its code; the role trusts the Lambda service; all three are in one account; policy controls are resolved. The subject can then run code as the role.&quot;
+ },
+ &quot;predicates&quot;: {
+  &quot;s3_get_object&quot;: &quot;subject has effective s3:GetObject on object&quot;,
+  &quot;iam_pass_role_to_lambda&quot;: &quot;subject can pass role object to Lambda (iam:PassRole)&quot;,
+  &quot;lambda_create_function&quot;: &quot;subject can create Lambda workload object&quot;,
+  &quot;lambda_invoke_function&quot;: &quot;subject can invoke Lambda workload object&quot;,
+  &quot;controls_workload_code&quot;: &quot;subject controls the code of object&quot;,
+  &quot;role_trusts_lambda_service&quot;: &quot;subject trust policy allows the Lambda service&quot;
+ }
+}</pre></details></div><div class="ag-scard"><div class="ag-card-head"><span class="ag-icon " aria-hidden="true">healing</span><h3 class="ag-card-title">The fix</h3></div><p class="ag-note">Revoke <span class="ag-mono">f-ci-pass-deploy-admin</span> (CI deploy user (build pipeline) can pass Deployment admin role to Lambda) on an in-memory copy of the proposal, then rerun the whole analysis.</p><div class="ag-actions"><button type="button" class="ag-btn ag-btn-primary ag-sim-off" data-action="simulate"><span class="ag-icon " aria-hidden="true">science</span>Simulate the fix</button><button type="button" class="ag-btn ag-btn-ghost ag-sim-on" data-action="reset">Reset simulation</button></div><div class="ag-sim-off"><p class="ag-note" style="margin-top:14px">Normal access the fix must keep:</p><ul class="ag-expect"><li class="pass"><span class="ag-icon " aria-hidden="true">check_circle</span><div>CI deploy user (build pipeline) reads artifacts/release.zip<div class="ag-small">Proposed: pass</div></div></li><li class="pass"><span class="ag-icon " aria-hidden="true">check_circle</span><div>CI deploy user (build pipeline) can use App runtime execution role<div class="ag-small">Proposed: pass</div></div></li></ul></div><div class="ag-sim-on"><p class="ag-note" style="margin-top:14px">Normal access the fix must keep:</p><ul class="ag-expect"><li class="pass"><span class="ag-icon " aria-hidden="true">check_circle</span><div>CI deploy user (build pipeline) reads artifacts/release.zip<div class="ag-small">Proposed: pass, after the fix: pass</div></div></li><li class="pass"><span class="ag-icon " aria-hidden="true">check_circle</span><div>CI deploy user (build pipeline) can use App runtime execution role<div class="ag-small">Proposed: pass, after the fix: pass</div></div></li></ul><div class="ag-stats two"><div class="ag-stat good"><div class="ag-stat-label">High-risk paths</div><div class="ag-stat-value">1 → 0</div><div class="ag-stat-note">Proposed, then after the fix</div></div><div class="ag-stat good"><div class="ag-stat-label">Normal access</div><div class="ag-stat-value">2 of 2</div><div class="ag-stat-note">Expected-access checks that still pass</div></div></div><p class="ag-note"><span class="ag-badge green">Verified in this model</span> The path is gone and every relationship stayed resolved. The uploaded files are unchanged.</p></div></div></div><details class="ag-evidence"><summary><span class="ag-icon " aria-hidden="true">fact_check</span>Evidence for reviewers: every condition, pointer and check</summary><div class="ag-evidence-body"><h4>Every condition and its JSON pointer</h4><p class="ag-note">Step 1. p-ci-deployer runs code as r-deploy-admin through Lambda workload l-build-hook (Rule B): candidate <code>B:p-ci-deployer-&gt;r-deploy-admin@l-build-hook</code> is <strong>true</strong></p><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>State</th><th>Condition</th><th>Evidence</th><th>JSON pointer</th></tr></thead><tbody><tr><td><span class="ag-badge green">true</span></td><td>p-ci-deployer can pass role r-deploy-admin to Lambda (iam:PassRole)</td><td><code>f-ci-pass-deploy-admin</code> <span class="ag-badge new">changed false to true</span></td><td><code>/facts/1</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>p-ci-deployer can create Lambda workload l-build-hook</td><td><code>f-ci-create-build-hook</code></td><td><code>/facts/2</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>p-ci-deployer can invoke Lambda workload l-build-hook</td><td><code>f-ci-invoke-build-hook</code></td><td><code>/facts/3</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>p-ci-deployer controls the code of l-build-hook</td><td><code>f-ci-controls-build-hook-code</code> <span class="ag-badge gray">scenario assumption</span></td><td><code>/facts/4</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>r-deploy-admin trust policy allows the Lambda service</td><td><code>f-deploy-admin-trusts-lambda</code></td><td><code>/facts/6</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>p-ci-deployer, r-deploy-admin and l-build-hook are in the same synthetic account</td><td>derived</td><td><code>/nodes/0/account_id</code>, <code>/nodes/2/account_id</code>, <code>/nodes/3/account_id</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>policy restrictions are declared resolved for this scenario</td><td>derived</td><td><code>/coverage/policy_controls</code></td></tr></tbody></table></div><ul class="ag-list"><li>Entry principal p-ci-deployer is treated as controlled by the party proposing the change. This is a scenario assumption, not an inferred compromise.</li><li>p-ci-deployer controls the code of l-build-hook (scenario assumption, fact f-ci-controls-build-hook-code).</li><li>Declared facts stand for resolved synthetic model inputs; they are not evidence that AWS would authorise the same request in a real account.</li></ul><h4>Coverage</h4><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>Snapshot</th><th>Coverage</th><th>Rule A: direct S3 read</th><th>Rule B: role use via Lambda</th><th>Policy controls</th><th>Unmodelled mechanisms</th></tr></thead><tbody><tr><td>Baseline</td><td><span class="ag-badge green">complete</span></td><td>2 established, 2 blocked, 0 unresolved</td><td>1 established, 2 blocked, 0 unresolved</td><td>all 5 resolved</td><td>none</td></tr><tr><td>Proposed</td><td><span class="ag-badge green">complete</span></td><td>2 established, 4 blocked, 0 unresolved</td><td>2 established, 2 blocked, 0 unresolved</td><td>all 5 resolved</td><td>none</td></tr></tbody></table></div><h4>Every fact that changed</h4><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>Fact</th><th>Statement</th><th>Baseline</th><th>Proposed</th><th>Pointer</th></tr></thead><tbody><tr><td><code>f-ci-pass-deploy-admin</code></td><td>p-ci-deployer can pass role r-deploy-admin to Lambda (iam:PassRole)</td><td>false</td><td>true</td><td><code>/facts/1</code></td></tr></tbody></table></div><h4>Full report</h4><p class="ag-note"><a class="ag-link" href="reports/passrole.md" download>Download the Markdown report</a> with every finding, pointer, coverage issue and assumption. Engine 0.1.0, model attackgraph-rules-v1, analysis <code>56bc16da787997e8</code>.</p></div></details></section><section class="ag-scenario" id="sc-repair" role="tabpanel" aria-labelledby="tab-repair" data-scenario="repair" hidden><div class="ag-verdict safe" role="status"><span class="ag-icon " aria-hidden="true">check_circle</span><div><h3>The change closes 1 path and opens none</h3><p>Every relationship resolved. Complete for the declared synthetic model, not for a real AWS account.</p></div></div><div class="ag-stats"><div class="ag-stat "><div class="ag-stat-label">Facts changed</div><div class="ag-stat-value">1</div><div class="ag-stat-note">f-ci-pass-deploy-admin</div></div><div class="ag-stat good"><div class="ag-stat-label">New risky paths</div><div class="ag-stat-value">0</div><div class="ag-stat-note">Baseline 1, proposed 0</div></div><div class="ag-stat good"><div class="ag-stat-label">Coverage</div><div class="ag-stat-value">Complete</div><div class="ag-stat-note">Every relationship resolved</div></div><div class="ag-stat "><div class="ag-stat-label">Verified fix</div><div class="ag-stat-value">Not needed</div><div class="ag-stat-note">No new path to fix</div></div></div><div class="ag-scard"><div class="ag-card-head"><span class="ag-icon " aria-hidden="true">conversion_path</span><h3 class="ag-card-title">The path it closes</h3></div><p class="ag-note">CI deploy user (build pipeline) can no longer run code as Deployment admin role. The red arrow is the relationship the second snapshot removes.</p><div class="ag-path" role="img" aria-label="Route: CI deploy user (build pipeline) then Post-build hook function then Deployment admin role"><div class="ag-node"><div class="ag-node-kind"><span class="ag-icon " aria-hidden="true">person</span>Entry point</div><div class="ag-node-label">CI deploy user (build pipeline)</div><div class="ag-node-id">p-ci-deployer</div></div><div class="ag-hop cut"><span class="ag-badge red ag-hop-badge">Removed</span><div class="ag-hop-text">can pass Deployment admin role to</div><div class="ag-hop-line"></div></div><div class="ag-node faded"><div class="ag-node-kind"><span class="ag-icon " aria-hidden="true">deployed_code</span>Lambda function</div><div class="ag-node-label">Post-build hook function</div><div class="ag-node-id">l-build-hook</div></div><div class="ag-hop faded"><div class="ag-hop-text">runs as</div><div class="ag-hop-line"></div></div><div class="ag-node protected faded"><div class="ag-node-kind"><span class="ag-icon " aria-hidden="true">admin_panel_settings</span>Protected role</div><div class="ag-node-label">Deployment admin role</div><div class="ag-node-id">r-deploy-admin</div></div></div></div><div class="ag-row"><div class="ag-scard change"><div class="ag-card-head"><span class="ag-icon " aria-hidden="true">difference</span><h3 class="ag-card-title">The change</h3><span class="ag-badge green">Path closed</span></div><p class="ag-note">The second snapshot flips this condition back.</p><div class="ag-change"><div class="ag-change-text">CI deploy user (build pipeline) can pass Deployment admin role to Lambda</div><div class="ag-flip"><span class="from">true</span><span class="ag-icon " aria-hidden="true">arrow_forward</span><span class="to">false</span></div><div class="ag-small" style="margin-top:6px">Fact <span class="ag-mono">f-ci-pass-deploy-admin</span> at <span class="ag-mono">/facts/1</span></div></div><details class="ag-gloss"><summary><span class="ag-icon " aria-hidden="true">school</span>What is iam:PassRole?</summary><p>It is the permission to hand an IAM role to an AWS service. If someone can hand a powerful role to a Lambda function they write and run, their code runs with that role's permissions. That is why this one permission matters.</p></details></div><div class="ag-scard"><div class="ag-card-head"><span class="ag-icon " aria-hidden="true">checklist</span><h3 class="ag-card-title">What the route needed</h3><span class="ag-badge gray">7 of 7 hold</span></div><p class="ag-note">Every condition held in the first snapshot. The second one takes away the changed one.</p><ul class="ag-conds"><li class="ag-cond true changed"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">CI deploy user (build pipeline) can pass Deployment admin role to Lambda</div><div class="ag-cond-meta"><span class="ag-badge new">Changed: true to false</span><span class="ag-mono">f-ci-pass-deploy-admin</span></div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">CI deploy user (build pipeline) can create Post-build hook function</div><div class="ag-cond-meta"><span class="ag-mono">f-ci-create-build-hook</span></div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">CI deploy user (build pipeline) can invoke Post-build hook function</div><div class="ag-cond-meta"><span class="ag-mono">f-ci-invoke-build-hook</span></div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">CI deploy user (build pipeline) controls the code Post-build hook function runs</div><div class="ag-cond-meta"><span class="ag-badge gray">Scenario assumption</span><span class="ag-mono">f-ci-controls-build-hook-code</span></div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">Deployment admin role trusts the Lambda service</div><div class="ag-cond-meta"><span class="ag-mono">f-deploy-admin-trusts-lambda</span></div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">Everything is in one AWS account</div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">No unresolved policy restrictions apply</div></div></li></ul></div></div><div class="ag-row even"><div class="ag-scard"><div class="ag-card-head"><span class="ag-icon " aria-hidden="true">auto_awesome</span><h3 class="ag-card-title">Why it matters</h3><span class="ag-badge green">Amazon Bedrock</span></div><p class="ag-note">Amazon Nova Pro explains the evidence in plain English. It sees placeholder IDs only and cannot change the result.</p><div class="ag-block-badges"><span class="ag-badge gray">Deterministic summary, not AI-generated</span></div><p class="ag-summary">CI deploy user (build pipeline) can no longer run code as Deployment admin role. The second snapshot changes: CI deploy user (build pipeline) can pass Deployment admin role to Lambda (true to false). Nothing was deployed or executed.</p><p class="ag-hosted-note">Live Amazon Bedrock explanations run in the local app. The hosted page makes no AI calls.</p><details class="ag-gloss"><summary><span class="ag-icon " aria-hidden="true">data_object</span>What the model sees</summary><pre class="ag-json">{
+ &quot;analysis&quot;: {
+  &quot;model_version&quot;: &quot;attackgraph-rules-v1&quot;,
+  &quot;data&quot;: &quot;synthetic configuration JSON&quot;,
+  &quot;comparison&quot;: &quot;baseline versus proposed snapshot&quot;,
+  &quot;coverage_complete&quot;: true
+ },
+ &quot;finding&quot;: {
+  &quot;id&quot;: &quot;A1&quot;,
+  &quot;impact&quot;: &quot;privileged_role_use&quot;,
+  &quot;severity&quot;: &quot;High&quot;,
+  &quot;comparison_status&quot;: &quot;removed&quot;,
+  &quot;provisional&quot;: false,
+  &quot;entry&quot;: &quot;P1&quot;,
+  &quot;target&quot;: &quot;R1&quot;,
+  &quot;target_classification&quot;: &quot;privileged_role&quot;,
+  &quot;baseline_state&quot;: &quot;reachable&quot;,
+  &quot;proposal_state&quot;: &quot;unreachable&quot;
+ },
+ &quot;nodes&quot;: [
+  {
+   &quot;alias&quot;: &quot;P1&quot;,
+   &quot;kind&quot;: &quot;principal&quot;
+  },
+  {
+   &quot;alias&quot;: &quot;R1&quot;,
+   &quot;kind&quot;: &quot;role&quot;
+  },
+  {
+   &quot;alias&quot;: &quot;L1&quot;,
+   &quot;kind&quot;: &quot;lambda&quot;
+  }
+ ],
+ &quot;witness&quot;: [
+  {
+   &quot;step&quot;: 1,
+   &quot;rule&quot;: &quot;lambda_pass_role&quot;,
+   &quot;from&quot;: &quot;P1&quot;,
+   &quot;to&quot;: &quot;R1&quot;,
+   &quot;via&quot;: &quot;L1&quot;,
+   &quot;state&quot;: &quot;true&quot;,
+   &quot;prerequisites&quot;: [
+    {
+     &quot;id&quot;: &quot;F1&quot;,
+     &quot;predicate&quot;: &quot;iam_pass_role_to_lambda&quot;,
+     &quot;subject&quot;: &quot;P1&quot;,
+     &quot;object&quot;: &quot;R1&quot;,
+     &quot;baseline_state&quot;: &quot;true&quot;,
+     &quot;proposal_state&quot;: &quot;false&quot;,
+     &quot;changed&quot;: true
+    },
+    {
+     &quot;id&quot;: &quot;F2&quot;,
+     &quot;predicate&quot;: &quot;lambda_create_function&quot;,
+     &quot;subject&quot;: &quot;P1&quot;,
+     &quot;object&quot;: &quot;L1&quot;,
+     &quot;baseline_state&quot;: &quot;true&quot;,
+     &quot;proposal_state&quot;: &quot;true&quot;,
+     &quot;changed&quot;: false
+    },
+    {
+     &quot;id&quot;: &quot;F3&quot;,
+     &quot;predicate&quot;: &quot;lambda_invoke_function&quot;,
+     &quot;subject&quot;: &quot;P1&quot;,
+     &quot;object&quot;: &quot;L1&quot;,
+     &quot;baseline_state&quot;: &quot;true&quot;,
+     &quot;proposal_state&quot;: &quot;true&quot;,
+     &quot;changed&quot;: false
+    },
+    {
+     &quot;id&quot;: &quot;F4&quot;,
+     &quot;predicate&quot;: &quot;controls_workload_code&quot;,
+     &quot;subject&quot;: &quot;P1&quot;,
+     &quot;object&quot;: &quot;L1&quot;,
+     &quot;baseline_state&quot;: &quot;true&quot;,
+     &quot;proposal_state&quot;: &quot;true&quot;,
+     &quot;changed&quot;: false,
+     &quot;scenario_assumption&quot;: true
+    },
+    {
+     &quot;id&quot;: &quot;F5&quot;,
+     &quot;predicate&quot;: &quot;role_trusts_lambda_service&quot;,
+     &quot;subject&quot;: &quot;R1&quot;,
+     &quot;baseline_state&quot;: &quot;true&quot;,
+     &quot;proposal_state&quot;: &quot;true&quot;,
+     &quot;changed&quot;: false
+    },
+    {
+     &quot;id&quot;: &quot;D1&quot;,
+     &quot;check&quot;: &quot;same_account&quot;,
+     &quot;state&quot;: &quot;true&quot;
+    },
+    {
+     &quot;id&quot;: &quot;D2&quot;,
+     &quot;check&quot;: &quot;policy_controls_resolved&quot;,
+     &quot;state&quot;: &quot;true&quot;
+    }
+   ]
+  }
+ ],
+ &quot;changed_facts&quot;: [
+  {
+   &quot;id&quot;: &quot;F1&quot;,
+   &quot;baseline_state&quot;: &quot;true&quot;,
+   &quot;proposal_state&quot;: &quot;false&quot;
+  }
+ ],
+ &quot;assumptions&quot;: [
+  &quot;P1 is treated as controlled by the party proposing the change (scenario assumption).&quot;,
+  &quot;Fact F4 is a scenario assumption, not an observed permission.&quot;
+ ],
+ &quot;fix_candidates&quot;: [],
+ &quot;rules&quot;: {
+  &quot;s3_direct_read&quot;: &quot;Established when the subject has an effective s3:GetObject fact for the object and policy controls are resolved.&quot;,
+  &quot;lambda_pass_role&quot;: &quot;Established only when all are true for the same subject, role and workload: the subject can pass the role to Lambda, create and invoke the workload, and controls its code; the role trusts the Lambda service; all three are in one account; policy controls are resolved. The subject can then run code as the role.&quot;
+ },
+ &quot;predicates&quot;: {
+  &quot;s3_get_object&quot;: &quot;subject has effective s3:GetObject on object&quot;,
+  &quot;iam_pass_role_to_lambda&quot;: &quot;subject can pass role object to Lambda (iam:PassRole)&quot;,
+  &quot;lambda_create_function&quot;: &quot;subject can create Lambda workload object&quot;,
+  &quot;lambda_invoke_function&quot;: &quot;subject can invoke Lambda workload object&quot;,
+  &quot;controls_workload_code&quot;: &quot;subject controls the code of object&quot;,
+  &quot;role_trusts_lambda_service&quot;: &quot;subject trust policy allows the Lambda service&quot;
+ }
+}</pre></details></div><div class="ag-scard"><div class="ag-card-head"><span class="ag-icon " aria-hidden="true">healing</span><h3 class="ag-card-title">The fix</h3></div><p class="ag-note">This path only exists in the first snapshot, so there is nothing to fix.</p></div></div><details class="ag-evidence"><summary><span class="ag-icon " aria-hidden="true">fact_check</span>Evidence for reviewers: every condition, pointer and check</summary><div class="ag-evidence-body"><h4>Every condition and its JSON pointer</h4><p class="ag-note">Step 1. p-ci-deployer runs code as r-deploy-admin through Lambda workload l-build-hook (Rule B): candidate <code>B:p-ci-deployer-&gt;r-deploy-admin@l-build-hook</code> is <strong>true</strong></p><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>State</th><th>Condition</th><th>Evidence</th><th>JSON pointer</th></tr></thead><tbody><tr><td><span class="ag-badge green">true</span></td><td>p-ci-deployer can pass role r-deploy-admin to Lambda (iam:PassRole)</td><td><code>f-ci-pass-deploy-admin</code> <span class="ag-badge new">changed true to false</span></td><td><code>/facts/1</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>p-ci-deployer can create Lambda workload l-build-hook</td><td><code>f-ci-create-build-hook</code></td><td><code>/facts/2</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>p-ci-deployer can invoke Lambda workload l-build-hook</td><td><code>f-ci-invoke-build-hook</code></td><td><code>/facts/3</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>p-ci-deployer controls the code of l-build-hook</td><td><code>f-ci-controls-build-hook-code</code> <span class="ag-badge gray">scenario assumption</span></td><td><code>/facts/4</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>r-deploy-admin trust policy allows the Lambda service</td><td><code>f-deploy-admin-trusts-lambda</code></td><td><code>/facts/6</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>p-ci-deployer, r-deploy-admin and l-build-hook are in the same synthetic account</td><td>derived</td><td><code>/nodes/0/account_id</code>, <code>/nodes/2/account_id</code>, <code>/nodes/3/account_id</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>policy restrictions are declared resolved for this scenario</td><td>derived</td><td><code>/coverage/policy_controls</code></td></tr></tbody></table></div><ul class="ag-list"><li>Entry principal p-ci-deployer is treated as controlled by the party proposing the change. This is a scenario assumption, not an inferred compromise.</li><li>p-ci-deployer controls the code of l-build-hook (scenario assumption, fact f-ci-controls-build-hook-code).</li><li>Declared facts stand for resolved synthetic model inputs; they are not evidence that AWS would authorise the same request in a real account.</li></ul><h4>Coverage</h4><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>Snapshot</th><th>Coverage</th><th>Rule A: direct S3 read</th><th>Rule B: role use via Lambda</th><th>Policy controls</th><th>Unmodelled mechanisms</th></tr></thead><tbody><tr><td>Baseline</td><td><span class="ag-badge green">complete</span></td><td>2 established, 4 blocked, 0 unresolved</td><td>2 established, 2 blocked, 0 unresolved</td><td>all 5 resolved</td><td>none</td></tr><tr><td>Proposed</td><td><span class="ag-badge green">complete</span></td><td>2 established, 2 blocked, 0 unresolved</td><td>1 established, 2 blocked, 0 unresolved</td><td>all 5 resolved</td><td>none</td></tr></tbody></table></div><h4>Every fact that changed</h4><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>Fact</th><th>Statement</th><th>Baseline</th><th>Proposed</th><th>Pointer</th></tr></thead><tbody><tr><td><code>f-ci-pass-deploy-admin</code></td><td>p-ci-deployer can pass role r-deploy-admin to Lambda (iam:PassRole)</td><td>true</td><td>false</td><td><code>/facts/1</code></td></tr></tbody></table></div><h4>Full report</h4><p class="ag-note"><a class="ag-link" href="reports/repair.md" download>Download the Markdown report</a> with every finding, pointer, coverage issue and assumption. Engine 0.1.0, model attackgraph-rules-v1, analysis <code>1b520603799eab67</code>.</p></div></details></section><section class="ag-scenario" id="sc-unknown" role="tabpanel" aria-labelledby="tab-unknown" data-scenario="unknown" hidden><div class="ag-verdict unknown" role="status"><span class="ag-icon " aria-hidden="true">help</span><div><h3>Analysis incomplete</h3><p>1 relationship could not be resolved, so nothing here is a safe verdict. The unresolved condition is marked below.</p></div></div><div class="ag-stats"><div class="ag-stat "><div class="ag-stat-label">Facts changed</div><div class="ag-stat-value">1</div><div class="ag-stat-note">f-ci-pass-deploy-admin</div></div><div class="ag-stat "><div class="ag-stat-label">New risky paths</div><div class="ag-stat-value">0 confirmed</div><div class="ag-stat-note">Baseline 0, proposed 0; unresolved paths are not counted</div></div><div class="ag-stat risk"><div class="ag-stat-label">Coverage</div><div class="ag-stat-value">Incomplete</div><div class="ag-stat-note">1 unresolved relationship</div></div><div class="ag-stat "><div class="ag-stat-label">Verified fix</div><div class="ag-stat-value">Not yet</div><div class="ag-stat-note">A fix cannot be verified while a condition is unknown</div></div></div><div class="ag-scard"><div class="ag-card-head"><span class="ag-icon " aria-hidden="true">conversion_path</span><h3 class="ag-card-title">A possible path, not established</h3></div><p class="ag-note">A dashed arrow depends on an unknown condition, so this is not a finding and not safe either.</p><div class="ag-path" role="img" aria-label="Route: CI deploy user (build pipeline) then Post-build hook function then Deployment admin role"><div class="ag-node"><div class="ag-node-kind"><span class="ag-icon " aria-hidden="true">person</span>Entry point</div><div class="ag-node-label">CI deploy user (build pipeline)</div><div class="ag-node-id">p-ci-deployer</div></div><div class="ag-hop maybe"><span class="ag-badge amber ag-hop-badge">Unknown</span><div class="ag-hop-text">can pass Deployment admin role to</div><div class="ag-hop-line"></div></div><div class="ag-node"><div class="ag-node-kind"><span class="ag-icon " aria-hidden="true">deployed_code</span>Lambda function</div><div class="ag-node-label">Post-build hook function</div><div class="ag-node-id">l-build-hook</div></div><div class="ag-hop maybe"><div class="ag-hop-text">runs as</div><div class="ag-hop-line"></div></div><div class="ag-node protected"><div class="ag-node-kind"><span class="ag-icon " aria-hidden="true">admin_panel_settings</span>Protected role</div><div class="ag-node-label">Deployment admin role</div><div class="ag-node-id">r-deploy-admin</div></div></div></div><div class="ag-row"><div class="ag-scard change"><div class="ag-card-head"><span class="ag-icon " aria-hidden="true">difference</span><h3 class="ag-card-title">The change</h3><span class="ag-badge amber">Unresolved</span></div><p class="ag-note">The proposal makes this condition unknown, so the engine cannot decide.</p><div class="ag-change"><div class="ag-change-text">CI deploy user (build pipeline) can pass Deployment admin role to Lambda</div><div class="ag-flip"><span class="from">false</span><span class="ag-icon " aria-hidden="true">arrow_forward</span><span class="to">unknown</span></div><div class="ag-small" style="margin-top:6px">Fact <span class="ag-mono">f-ci-pass-deploy-admin</span> at <span class="ag-mono">/facts/1</span></div></div><details class="ag-gloss"><summary><span class="ag-icon " aria-hidden="true">school</span>What is iam:PassRole?</summary><p>It is the permission to hand an IAM role to an AWS service. If someone can hand a powerful role to a Lambda function they write and run, their code runs with that role's permissions. That is why this one permission matters.</p></details></div><div class="ag-scard"><div class="ag-card-head"><span class="ag-icon " aria-hidden="true">checklist</span><h3 class="ag-card-title">What is unresolved</h3><span class="ag-badge gray">6 of 7 hold</span></div><p class="ag-note">One condition is unknown, so the engine will not call this route open or closed.</p><ul class="ag-conds"><li class="ag-cond unknown changed"><span class="ag-icon " aria-hidden="true">help</span><div><div class="ag-cond-text">CI deploy user (build pipeline) can pass Deployment admin role to Lambda</div><div class="ag-cond-meta"><span class="ag-badge new">Changed: false to unknown</span><span class="ag-badge amber">Unknown</span><span class="ag-mono">f-ci-pass-deploy-admin</span></div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">CI deploy user (build pipeline) can create Post-build hook function</div><div class="ag-cond-meta"><span class="ag-mono">f-ci-create-build-hook</span></div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">CI deploy user (build pipeline) can invoke Post-build hook function</div><div class="ag-cond-meta"><span class="ag-mono">f-ci-invoke-build-hook</span></div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">CI deploy user (build pipeline) controls the code Post-build hook function runs</div><div class="ag-cond-meta"><span class="ag-badge gray">Scenario assumption</span><span class="ag-mono">f-ci-controls-build-hook-code</span></div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">Deployment admin role trusts the Lambda service</div><div class="ag-cond-meta"><span class="ag-mono">f-deploy-admin-trusts-lambda</span></div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">Everything is in one AWS account</div></div></li><li class="ag-cond true"><span class="ag-icon " aria-hidden="true">check_circle</span><div><div class="ag-cond-text">No unresolved policy restrictions apply</div></div></li></ul></div></div><div class="ag-row even"><div class="ag-scard"><div class="ag-card-head"><span class="ag-icon " aria-hidden="true">auto_awesome</span><h3 class="ag-card-title">Why it matters</h3><span class="ag-badge green">Amazon Bedrock</span></div><p class="ag-note">Amazon Nova Pro explains the evidence in plain English. It sees placeholder IDs only and cannot change the result.</p><div class="ag-block-badges"><span class="ag-badge gray">Deterministic summary, not AI-generated</span></div><p class="ag-summary">It is unresolved whether CI deploy user (build pipeline) can reach Deployment admin role: CI deploy user (build pipeline) can pass Deployment admin role to Lambda is unknown. An unknown condition is never treated as safe. Nothing was deployed or executed.</p><p class="ag-hosted-note">Live Amazon Bedrock explanations run in the local app. The hosted page makes no AI calls.</p><details class="ag-gloss"><summary><span class="ag-icon " aria-hidden="true">data_object</span>What the model sees</summary><pre class="ag-json">{
+ &quot;analysis&quot;: {
+  &quot;model_version&quot;: &quot;attackgraph-rules-v1&quot;,
+  &quot;data&quot;: &quot;synthetic configuration JSON&quot;,
+  &quot;comparison&quot;: &quot;baseline versus proposed snapshot&quot;,
+  &quot;coverage_complete&quot;: false
+ },
+ &quot;finding&quot;: {
+  &quot;id&quot;: &quot;A1&quot;,
+  &quot;impact&quot;: &quot;privileged_role_use&quot;,
+  &quot;severity&quot;: &quot;High&quot;,
+  &quot;comparison_status&quot;: &quot;inconclusive&quot;,
+  &quot;provisional&quot;: true,
+  &quot;entry&quot;: &quot;P1&quot;,
+  &quot;target&quot;: &quot;R1&quot;,
+  &quot;target_classification&quot;: &quot;privileged_role&quot;,
+  &quot;baseline_state&quot;: &quot;unreachable&quot;,
+  &quot;proposal_state&quot;: &quot;inconclusive&quot;
+ },
+ &quot;nodes&quot;: [
+  {
+   &quot;alias&quot;: &quot;P1&quot;,
+   &quot;kind&quot;: &quot;principal&quot;
+  },
+  {
+   &quot;alias&quot;: &quot;R1&quot;,
+   &quot;kind&quot;: &quot;role&quot;
+  },
+  {
+   &quot;alias&quot;: &quot;L1&quot;,
+   &quot;kind&quot;: &quot;lambda&quot;
+  }
+ ],
+ &quot;witness&quot;: [
+  {
+   &quot;step&quot;: 1,
+   &quot;rule&quot;: &quot;lambda_pass_role&quot;,
+   &quot;from&quot;: &quot;P1&quot;,
+   &quot;to&quot;: &quot;R1&quot;,
+   &quot;via&quot;: &quot;L1&quot;,
+   &quot;state&quot;: &quot;unknown&quot;,
+   &quot;prerequisites&quot;: [
+    {
+     &quot;id&quot;: &quot;F1&quot;,
+     &quot;predicate&quot;: &quot;iam_pass_role_to_lambda&quot;,
+     &quot;subject&quot;: &quot;P1&quot;,
+     &quot;object&quot;: &quot;R1&quot;,
+     &quot;baseline_state&quot;: &quot;false&quot;,
+     &quot;proposal_state&quot;: &quot;unknown&quot;,
+     &quot;changed&quot;: true
+    },
+    {
+     &quot;id&quot;: &quot;F2&quot;,
+     &quot;predicate&quot;: &quot;lambda_create_function&quot;,
+     &quot;subject&quot;: &quot;P1&quot;,
+     &quot;object&quot;: &quot;L1&quot;,
+     &quot;baseline_state&quot;: &quot;true&quot;,
+     &quot;proposal_state&quot;: &quot;true&quot;,
+     &quot;changed&quot;: false
+    },
+    {
+     &quot;id&quot;: &quot;F3&quot;,
+     &quot;predicate&quot;: &quot;lambda_invoke_function&quot;,
+     &quot;subject&quot;: &quot;P1&quot;,
+     &quot;object&quot;: &quot;L1&quot;,
+     &quot;baseline_state&quot;: &quot;true&quot;,
+     &quot;proposal_state&quot;: &quot;true&quot;,
+     &quot;changed&quot;: false
+    },
+    {
+     &quot;id&quot;: &quot;F4&quot;,
+     &quot;predicate&quot;: &quot;controls_workload_code&quot;,
+     &quot;subject&quot;: &quot;P1&quot;,
+     &quot;object&quot;: &quot;L1&quot;,
+     &quot;baseline_state&quot;: &quot;true&quot;,
+     &quot;proposal_state&quot;: &quot;true&quot;,
+     &quot;changed&quot;: false,
+     &quot;scenario_assumption&quot;: true
+    },
+    {
+     &quot;id&quot;: &quot;F5&quot;,
+     &quot;predicate&quot;: &quot;role_trusts_lambda_service&quot;,
+     &quot;subject&quot;: &quot;R1&quot;,
+     &quot;baseline_state&quot;: &quot;true&quot;,
+     &quot;proposal_state&quot;: &quot;true&quot;,
+     &quot;changed&quot;: false
+    },
+    {
+     &quot;id&quot;: &quot;D1&quot;,
+     &quot;check&quot;: &quot;same_account&quot;,
+     &quot;state&quot;: &quot;true&quot;
+    },
+    {
+     &quot;id&quot;: &quot;D2&quot;,
+     &quot;check&quot;: &quot;policy_controls_resolved&quot;,
+     &quot;state&quot;: &quot;true&quot;
+    }
+   ]
+  }
+ ],
+ &quot;changed_facts&quot;: [
+  {
+   &quot;id&quot;: &quot;F1&quot;,
+   &quot;baseline_state&quot;: &quot;false&quot;,
+   &quot;proposal_state&quot;: &quot;unknown&quot;
+  }
+ ],
+ &quot;assumptions&quot;: [
+  &quot;P1 is treated as controlled by the party proposing the change (scenario assumption).&quot;,
+  &quot;Fact F4 is a scenario assumption, not an observed permission.&quot;
+ ],
+ &quot;fix_candidates&quot;: [],
+ &quot;rules&quot;: {
+  &quot;s3_direct_read&quot;: &quot;Established when the subject has an effective s3:GetObject fact for the object and policy controls are resolved.&quot;,
+  &quot;lambda_pass_role&quot;: &quot;Established only when all are true for the same subject, role and workload: the subject can pass the role to Lambda, create and invoke the workload, and controls its code; the role trusts the Lambda service; all three are in one account; policy controls are resolved. The subject can then run code as the role.&quot;
+ },
+ &quot;predicates&quot;: {
+  &quot;s3_get_object&quot;: &quot;subject has effective s3:GetObject on object&quot;,
+  &quot;iam_pass_role_to_lambda&quot;: &quot;subject can pass role object to Lambda (iam:PassRole)&quot;,
+  &quot;lambda_create_function&quot;: &quot;subject can create Lambda workload object&quot;,
+  &quot;lambda_invoke_function&quot;: &quot;subject can invoke Lambda workload object&quot;,
+  &quot;controls_workload_code&quot;: &quot;subject controls the code of object&quot;,
+  &quot;role_trusts_lambda_service&quot;: &quot;subject trust policy allows the Lambda service&quot;
+ }
+}</pre></details></div><div class="ag-scard"><div class="ag-card-head"><span class="ag-icon " aria-hidden="true">healing</span><h3 class="ag-card-title">The fix</h3></div><p class="ag-note">No fix can be verified while a condition is unknown. Declare the fact as true or false, then compare again.</p></div></div><details class="ag-evidence"><summary><span class="ag-icon " aria-hidden="true">fact_check</span>Evidence for reviewers: every condition, pointer and check</summary><div class="ag-evidence-body"><h4>Every condition and its JSON pointer</h4><p class="ag-note">Step 1. p-ci-deployer runs code as r-deploy-admin through Lambda workload l-build-hook (Rule B): candidate <code>B:p-ci-deployer-&gt;r-deploy-admin@l-build-hook</code> is <strong>unknown</strong></p><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>State</th><th>Condition</th><th>Evidence</th><th>JSON pointer</th></tr></thead><tbody><tr><td><span class="ag-badge amber">unknown</span></td><td>p-ci-deployer can pass role r-deploy-admin to Lambda (iam:PassRole)</td><td><code>f-ci-pass-deploy-admin</code> <span class="ag-badge new">changed false to unknown</span></td><td><code>/facts/1</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>p-ci-deployer can create Lambda workload l-build-hook</td><td><code>f-ci-create-build-hook</code></td><td><code>/facts/2</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>p-ci-deployer can invoke Lambda workload l-build-hook</td><td><code>f-ci-invoke-build-hook</code></td><td><code>/facts/3</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>p-ci-deployer controls the code of l-build-hook</td><td><code>f-ci-controls-build-hook-code</code> <span class="ag-badge gray">scenario assumption</span></td><td><code>/facts/4</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>r-deploy-admin trust policy allows the Lambda service</td><td><code>f-deploy-admin-trusts-lambda</code></td><td><code>/facts/6</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>p-ci-deployer, r-deploy-admin and l-build-hook are in the same synthetic account</td><td>derived</td><td><code>/nodes/0/account_id</code>, <code>/nodes/2/account_id</code>, <code>/nodes/3/account_id</code></td></tr><tr><td><span class="ag-badge green">true</span></td><td>policy restrictions are declared resolved for this scenario</td><td>derived</td><td><code>/coverage/policy_controls</code></td></tr></tbody></table></div><h4>Coverage</h4><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>Snapshot</th><th>Coverage</th><th>Rule A: direct S3 read</th><th>Rule B: role use via Lambda</th><th>Policy controls</th><th>Unmodelled mechanisms</th></tr></thead><tbody><tr><td>Baseline</td><td><span class="ag-badge green">complete</span></td><td>2 established, 2 blocked, 0 unresolved</td><td>1 established, 2 blocked, 0 unresolved</td><td>all 5 resolved</td><td>none</td></tr><tr><td>Proposed</td><td><span class="ag-badge amber">incomplete</span></td><td>2 established, 4 blocked, 0 unresolved</td><td>1 established, 2 blocked, 1 unresolved</td><td>all 5 resolved</td><td>none</td></tr></tbody></table></div><ul class="ag-list"><li>p-ci-deployer can run code as r-deploy-admin through Lambda workload l-build-hook: unresolved because fact f-ci-pass-deploy-admin (p-ci-deployer can pass role r-deploy-admin to Lambda (iam:PassRole)) is unknown</li></ul><h4>Every fact that changed</h4><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>Fact</th><th>Statement</th><th>Baseline</th><th>Proposed</th><th>Pointer</th></tr></thead><tbody><tr><td><code>f-ci-pass-deploy-admin</code></td><td>p-ci-deployer can pass role r-deploy-admin to Lambda (iam:PassRole)</td><td>false</td><td>unknown</td><td><code>/facts/1</code></td></tr></tbody></table></div><h4>Full report</h4><p class="ag-note"><a class="ag-link" href="reports/unknown.md" download>Download the Markdown report</a> with every finding, pointer, coverage issue and assumption. Engine 0.1.0, model attackgraph-rules-v1, analysis <code>1985aa1c5454e5bb</code>.</p></div></details></section><section class="ag-scenario" id="sc-invalid" role="tabpanel" aria-labelledby="tab-invalid" data-scenario="invalid" hidden><div class="ag-verdict error" role="status"><span class="ag-icon " aria-hidden="true">error</span><div><h3>These files can&#x27;t be analysed yet</h3><p>3 field errors found. Neither file is analysed until both are valid.</p><ul class="ag-errors"><li><code>invalid-references.json /facts/1/object</code> references unknown node &quot;r-missing-role&quot;</li><li><code>invalid-references.json /facts/15/object</code> the object of s3_get_object must be a node of kind s3_object, but &quot;r-deploy-admin&quot; has kind role</li><li><code>invalid-references.json /nodes/6/id</code> duplicate node ID &quot;r-app-runtime&quot; (first defined at /nodes/1)</li></ul></div></div></section><section class="ag-scenario" id="sc-upload" role="tabpanel" aria-labelledby="tab-upload" data-scenario="upload" hidden><div class="ag-verdict info" role="status"><span class="ag-icon " aria-hidden="true">upload_file</span><div><h3>Uploads run in the local app</h3><p>This hosted page is a static build of the bundled scenarios, so nothing you choose leaves your machine and no AI call is made. To analyse your own snapshots, run the app locally from the repository:</p></div></div><pre class="ag-json flat">python3 -m venv .venv &amp;&amp; .venv/bin/pip install -r requirements.txt
+.venv/bin/streamlit run app.py</pre><p class="ag-note">Snapshots follow <code>attackgraph/snapshot.schema.json</code>; start from <code>fixtures/demo/</code>.</p></section><div class="ag-section"></div><div class="ag-trust" id="ag-trust"><div><h2 class="ag-h2">Built to be checked</h2><p class="ag-sub">Every result traces back to a line in the input files, and the limits are stated up front.</p><div class="ag-chips"><span class="ag-chip"><span class="ag-icon " aria-hidden="true">dataset</span>Synthetic data only</span><span class="ag-chip"><span class="ag-icon " aria-hidden="true">block</span>Nothing is deployed or executed</span><span class="ag-chip"><span class="ag-icon " aria-hidden="true">psychology</span>The AI explains, it never decides</span><span class="ag-chip"><span class="ag-icon " aria-hidden="true">visibility_off</span>Labels never reach the model</span><span class="ag-chip"><span class="ag-icon " aria-hidden="true">help</span>Unknown is never reported as safe</span><span class="ag-chip"><span class="ag-icon " aria-hidden="true">link</span>Every fact links to a JSON line</span></div></div><div class="ag-faq"><details><summary>Does it connect to a real AWS account?</summary><p>No. It reads two synthetic JSON snapshots. The only AWS call is to Amazon Bedrock, for the explanation text.</p></details><details><summary>What does Amazon Bedrock do here?</summary><p>Nova Pro turns the evidence behind one finding into a short explanation. It sees placeholder IDs, never labels, and every ID it cites is checked. Anything else is discarded and a deterministic summary is shown.</p></details><details><summary>What does Verified in this model mean?</summary><p>The engine reran the whole analysis with the permission revoked, the route disappeared, and every relationship stayed resolved. It is a statement about the synthetic model, not a guarantee for a real account.</p></details><details><summary>Why is an unknown fact never treated as safe?</summary><p>If the snapshot does not say whether a permission exists, the engine cannot rule the route out. It reports the result as incomplete instead of guessing.</p></details><details><summary>What is out of scope?</summary><p>Terraform and raw IAM policy parsing, EC2, general AssumeRole chains, multi-account analysis and automatic remediation. The model covers two rules: direct S3 reads and role use through a Lambda function.</p></details></div></div><footer class="ag-footer"><span>AttackGraph AI. Built for the AWS Build Beyond Student AI Demo Challenge 2026.</span><span>Streamlit, NetworkX and Amazon Bedrock. Synthetic data only.</span></footer><p class="ag-hosted-note">Static build of the bundled scenarios, generated 2026-09-29 by engine 0.1.0. No uploads, no AI calls, no tracking.</p></main>
+
+<script>
+(() => {
+  const tabs = [...document.querySelectorAll("[data-tab]")];
+  const panels = [...document.querySelectorAll(".ag-scenario")];
+  function show(name, update) {
+    if (!panels.some((p) => p.dataset.scenario === name)) name = "passrole";
+    panels.forEach((p) => { p.hidden = p.dataset.scenario !== name; });
+    tabs.forEach((t) => {
+      const on = t.dataset.tab === name;
+      t.setAttribute("aria-selected", String(on));
+      t.tabIndex = on ? 0 : -1;
+    });
+    if (update) {
+      const url = new URL(location.href);
+      if (name === "passrole") url.searchParams.delete("scenario"); else url.searchParams.set("scenario", name);
+      history.replaceState(null, "", url);
+    }
+  }
+  tabs.forEach((tab, i) => {
+    tab.addEventListener("click", () => show(tab.dataset.tab, true));
+    tab.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      const next = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+      next.focus();
+      show(next.dataset.tab, true);
+    });
+  });
+  document.addEventListener("click", (e) => {
+    const button = e.target.closest("[data-action]");
+    if (!button) return;
+    button.closest(".ag-scenario").dataset.simulated = button.dataset.action === "simulate" ? "true" : "false";
+  });
+  show(new URLSearchParams(location.search).get("scenario") || "passrole", false);
+})();
+</script>
+</body>
+</html>

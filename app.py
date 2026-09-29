@@ -8,11 +8,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 
 import streamlit as st
 
-from attackgraph import ENGINE_VERSION, MODEL_VERSION, web
+from attackgraph import ENGINE_VERSION, MODEL_VERSION, page, web
 from attackgraph.analysis import RULE_TITLES, Finding
 from attackgraph.explain import (
     TIMEOUT_SECONDS,
@@ -25,22 +24,11 @@ from attackgraph.explain import (
 from attackgraph.pipeline import PipelineResult, run
 from attackgraph.render import md_escape, md_segments, step_text, witness_dot
 from attackgraph.report import build_report
+from attackgraph.scenarios import SCENARIO_LABELS, UPLOAD, run_scenario
 from attackgraph.simulate import best_fix_for
 from attackgraph.snapshot import MAX_BYTES, POLICY_CONTROLS, UNMODELLED_MECHANISMS
-from attackgraph.story import build_story, expected_text, involves_pass_role, is_potential, summary
+from attackgraph.story import build_story, summary
 
-ROOT = Path(__file__).resolve().parent
-FIXTURES = ROOT / "fixtures"
-SCENARIOS = {
-    "passrole": ("PassRole change", "demo/baseline.json", "demo/proposed.json"),
-    "repair": ("Proposed vs repaired", "demo/proposed.json", "demo/repaired.json"),
-    "unknown": ("Unknown fact", "demo/baseline.json", "examples/unknown-prerequisite.json"),
-    "invalid": ("Invalid file", "demo/baseline.json", "examples/invalid-references.json"),
-}
-UPLOAD = "upload"
-SCENARIO_LABELS = {**{key: value[0] for key, value in SCENARIOS.items()}, UPLOAD: "Upload your own"}
-STATUS_BADGES = {"added": "amber", "removed": "green", "unchanged": "gray", "inconclusive": "amber"}
-STATUS_WORDS = {"added": "New path", "removed": "Path closed", "unchanged": "Unchanged", "inconclusive": "Unresolved"}
 STATE_BADGE = {"true": ":blue-badge[true]", "false": ":gray-badge[false]", "unknown": ":orange-badge[unknown]"}
 RESULT_BADGE = {"pass": ":green-badge[pass]", "fail": ":red-badge[fail]", "inconclusive": ":orange-badge[inconclusive]"}
 REASONS = {"invalid": "reply rejected", "refused": "model declined", "timeout": "timed out", "disabled": "turned off"}
@@ -48,15 +36,6 @@ REASONS = {"invalid": "reply rejected", "refused": "model declined", "timeout": 
 
 def code(value: str) -> str:
     return f"`{value}`"
-
-
-def model_name(model_id: str) -> str:
-    names = {"nova-pro": "Amazon Nova Pro", "nova-lite": "Amazon Nova Lite", "nova-2-lite": "Amazon Nova 2 Lite", "claude": "Claude"}
-    return next((name for key, name in names.items() if key in model_id), model_id)
-
-
-def plural(count: int, noun: str) -> str:
-    return f"{count} {noun}{'' if count == 1 else 's'}"
 
 
 def init_state() -> None:
@@ -82,10 +61,7 @@ def sync_scenario() -> None:
             st.session_state.result, st.session_state.loaded, st.session_state.simulation = None, (UPLOAD, None), None
         return
     if st.session_state.loaded != ("scenario", scenario):
-        _, baseline, proposal = SCENARIOS[scenario]
-        st.session_state.result = run(
-            (FIXTURES / baseline).read_bytes(), Path(baseline).name, (FIXTURES / proposal).read_bytes(), Path(proposal).name
-        )
+        st.session_state.result = run_scenario(scenario)
         st.session_state.loaded = ("scenario", scenario)
         st.session_state.simulation = None
 
@@ -98,8 +74,7 @@ def reset_app() -> None:
 
 @st.cache_resource
 def flagship() -> PipelineResult:
-    _, baseline, proposal = SCENARIOS["passrole"]
-    return run((FIXTURES / baseline).read_bytes(), "baseline.json", (FIXTURES / proposal).read_bytes(), "proposed.json")
+    return run_scenario("passrole")
 
 
 def hero_preview() -> str:
@@ -158,107 +133,6 @@ def schema_help() -> None:
     )
 
 
-def invalid_state(result: PipelineResult) -> None:
-    errors = [
-        (f"{loaded.source_name} {issue.pointer or '(file)'}", issue.message)
-        for loaded in (result.baseline, result.proposal)
-        for issue in loaded.issues
-    ]
-    st.html(
-        web.verdict(
-            "error",
-            "These files can't be analysed yet",
-            f"{plural(len(errors), 'field error')} found. Neither file is analysed until both are valid.",
-            errors,
-        )
-    )
-
-
-def verdict_block(result: PipelineResult) -> None:
-    comparison = result.comparison
-    added = [d for d in comparison.deltas if d.status == "added"]
-    removed = comparison.count("removed")
-    if comparison.verdict == "incomplete":
-        unresolved = len(comparison.baseline.coverage.issues) + len(comparison.proposal.coverage.issues)
-        st.html(
-            web.verdict(
-                "unknown",
-                "Analysis incomplete",
-                f"{plural(unresolved, 'relationship')} could not be resolved, so nothing here is a safe verdict. "
-                "The unresolved condition is marked below.",
-            )
-        )
-    elif added:
-        kinds = {d.impact for d in added}
-        target = "role" if kinds == {"privileged_role_use"} else "data" if kinds == {"sensitive_object_read"} else "resource"
-        first = build_story(comparison, added[0])
-        st.html(
-            web.verdict(
-                "risk",
-                f"{plural(len(added), 'new path')} to a protected {target}",
-                f"{first.headline}. Nothing was deployed: this is a static check of two synthetic snapshots.",
-            )
-        )
-    elif removed:
-        st.html(
-            web.verdict(
-                "safe",
-                f"The change closes {plural(removed, 'path')} and opens none",
-                "Every relationship resolved. Complete for the declared synthetic model, not for a real AWS account.",
-            )
-        )
-    else:
-        st.html(
-            web.verdict(
-                "safe",
-                "No new paths to protected resources",
-                "Every relationship resolved. Complete for the declared synthetic model, not for a real AWS account.",
-            )
-        )
-
-
-def stats_block(result: PipelineResult) -> None:
-    comparison = result.comparison
-    sim = active_simulation(result)
-    added = [d for d in comparison.deltas if d.status == "added"]
-    before, after = comparison.baseline.high_risk_count, comparison.proposal.high_risk_count
-    risk_note = f"Baseline {before}, proposed {after}"
-    if sim:
-        risk_note += f", after simulated fix {sim.simulated.high_risk_count}"
-    unresolved = len(comparison.proposal.coverage.issues) + len(comparison.baseline.coverage.issues)
-    fix = best_fix_for(result.fixes, added[0].id) if added else None
-    if not comparison.complete:
-        fix_value, fix_note, fix_tone = "Not yet", "A fix cannot be verified while a condition is unknown", ""
-    elif fix:
-        kept = sum(1 for r in fix.expected_after if r.result == "pass")
-        fix_value, fix_note, fix_tone = "1 revocation", f"Normal access kept: {kept} of {len(fix.expected_after)}", "good"
-    elif added:
-        fix_value, fix_note, fix_tone = "None found", "No single revocation closes the path", "risk"
-    else:
-        fix_value, fix_note, fix_tone = "Not needed", "No new path to fix", ""
-    first_change = comparison.fact_changes[0].fact_id if comparison.fact_changes else "No fact changed"
-    st.html(
-        web.stats(
-            [
-                ("Facts changed", str(len(comparison.fact_changes)), first_change, ""),
-                (
-                    "New risky paths",
-                    str(len(added)) if comparison.complete else f"{len(added)} confirmed",
-                    risk_note if comparison.complete else f"{risk_note}; unresolved paths are not counted",
-                    "risk" if added else "good" if comparison.complete else "",
-                ),
-                (
-                    "Coverage",
-                    "Complete" if comparison.complete else "Incomplete",
-                    "Every relationship resolved" if comparison.complete else f"{plural(unresolved, 'unresolved relationship')}",
-                    "good" if comparison.complete else "risk",
-                ),
-                ("Verified fix", fix_value, fix_note, fix_tone),
-            ]
-        )
-    )
-
-
 def choose_finding(comparison):
     deltas = comparison.deltas
     if not deltas:
@@ -268,90 +142,10 @@ def choose_finding(comparison):
     key = st.selectbox(
         "Finding to walk through",
         [d.id for d in deltas],
-        format_func=lambda k: f"{STATUS_WORDS[comparison.delta(k).status]}: {build_story(comparison, comparison.delta(k)).headline}",
+        format_func=lambda k: f"{page.STATUS_WORDS[comparison.delta(k).status]}: {build_story(comparison, comparison.delta(k)).headline}",
         key=f"finding-{comparison.analysis_id}",
     )
     return comparison.delta(key)
-
-
-def change_card(comparison, story) -> None:
-    delta = story.delta
-    badge = f'<span class="ag-badge {STATUS_BADGES[delta.status]}">{web.esc(STATUS_WORDS[delta.status])}</span>'
-    other = len(comparison.fact_changes) - len(story.changes)
-    extra = f'<p class="ag-note">{plural(other, "other fact")} also changed; see the evidence below.</p>' if other > 0 else ""
-    intro = {
-        "added": "The proposal flips this condition. Nothing else on the route changed.",
-        "removed": "The second snapshot flips this condition back.",
-        "unchanged": "The route exists in both snapshots.",
-        "inconclusive": "The proposal makes this condition unknown, so the engine cannot decide.",
-    }[delta.status]
-    if delta.status == "added" and len(story.changes) > 1:
-        intro = "The proposal flips these conditions."
-    glossary = web.PASSROLE_GLOSSARY if involves_pass_role(story) else ""
-    with st.container(key="agcard-change"):
-        st.html(
-            web.card_head("difference", "The change", badge)
-            + f'<p class="ag-note">{web.esc(intro)}</p>'
-            + web.change_block(story)
-            + extra
-            + glossary
-        )
-
-
-def path_card(result: PipelineResult, story) -> None:
-    delta = story.delta
-    sim = active_simulation(result)
-    title = {
-        "added": "The path it opens",
-        "removed": "The path it closes",
-        "unchanged": "A path in both snapshots",
-        "inconclusive": "A possible path, not established",
-    }[delta.status]
-    mode = "simulated" if sim and sim.removes(delta.id) else "closed" if delta.status == "removed" else "live"
-    target = "role" if delta.impact == "privileged_role_use" else "data"
-    if mode == "simulated":
-        title = "The path, closed by the simulated fix"
-        note = f"{sim.fact_id} is revoked on a copy of the proposal. The route no longer reaches the protected {target}."
-    elif delta.status == "added":
-        note = f"{story.headline}. Follow the arrows: each one is an established relationship."
-    elif delta.status == "inconclusive":
-        note = "A dashed arrow depends on an unknown condition, so this is not a finding and not safe either."
-    elif delta.status == "removed":
-        note = f"{story.headline}. The red arrow is the relationship the second snapshot removes."
-    else:
-        note = f"{story.headline}."
-    blocked = ""
-    if delta.status == "added" and all(step.baseline_state == "false" for step in story.steps):
-        ids = sorted({b for step in story.steps for b in step.baseline_blockers})
-        blocked = (
-            '<p class="ag-note">In the baseline the same route was blocked because '
-            + ", ".join(f'<span class="ag-mono">{web.esc(i)}</span>' for i in ids)
-            + " was false.</p>"
-        )
-    with st.container(key="agcard-path"):
-        st.html(
-            web.card_head("conversion_path", title)
-            + f'<p class="ag-note">{web.esc(note)}</p>'
-            + web.path(story, mode)
-            + blocked
-        )
-
-
-def conditions_card(story) -> None:
-    held = sum(1 for c in story.conditions if c.state == "true")
-    status = story.delta.status
-    title, lead = {
-        "added": ("Why the route works", "A route only counts when every condition holds. The changed one was the missing piece."),
-        "unchanged": ("Why the route works", "A route only counts when every condition holds."),
-        "removed": ("What the route needed", "Every condition held in the first snapshot. The second one takes away the changed one."),
-        "inconclusive": ("What is unresolved", "One condition is unknown, so the engine will not call this route open or closed."),
-    }[status]
-    with st.container(key="agcard-conds"):
-        st.html(
-            web.card_head("checklist", title, f'<span class="ag-badge gray">{held} of {len(story.conditions)} hold</span>')
-            + f'<p class="ag-note">{web.esc(lead)}</p>'
-            + web.conditions(story)
-        )
 
 
 def ai_card(result: PipelineResult, delta, story) -> None:
@@ -364,11 +158,7 @@ def ai_card(result: PipelineResult, delta, story) -> None:
     packet = build_packet(comparison, delta, result.fixes)
     enabled = ai_enabled()
     with st.container(key="agcard-ai"):
-        st.html(
-            web.card_head("auto_awesome", "Why it matters", '<span class="ag-badge green">Amazon Bedrock</span>')
-            + f'<p class="ag-note">{web.esc(model_name(model_id))} explains the evidence in plain English. It sees '
-            "placeholder IDs only and cannot change the result.</p>"
-        )
+        st.html(page.ai_intro(model_id))
         if st.button(
             "Explain with Amazon Bedrock",
             type="primary",
@@ -418,18 +208,9 @@ def fix_card(result: PipelineResult, delta, story) -> None:
     sim = active_simulation(result)
     with st.container(key="agcard-fix"):
         st.html(web.card_head("healing", "The fix"))
-        if delta.proposal is None:
-            st.html('<p class="ag-note">This path only exists in the first snapshot, so there is nothing to fix.</p>')
-            return
-        if is_potential(delta) or delta.status == "inconclusive":
-            st.html(
-                '<p class="ag-note">No fix can be verified while a condition is unknown. Declare the fact as true or '
-                "false, then compare again.</p>"
-            )
-            return
-        if not result.fixes:
-            reason = "The access already existed in the baseline." if delta.status == "unchanged" else "No newly enabled grant is on this route."
-            st.html(f'<p class="ag-note">No single-permission fix to test. {web.esc(reason)}</p>')
+        blocker = page.fix_blocker(result, delta)
+        if blocker:
+            st.html(f'<p class="ag-note">{web.esc(blocker)}</p>')
             return
         best = best_fix_for(result.fixes, delta.id)
         options = [f.id for f in result.fixes]
@@ -444,16 +225,7 @@ def fix_card(result: PipelineResult, delta, story) -> None:
                 horizontal=True,
             )
             chosen = next(f for f in result.fixes if f.id == pick)
-        story_fact = next((c for c in story.conditions if c.fact_id == chosen.fact_id), None)
-        human = story_fact.text if story_fact else chosen.proposal_fact.describe()
-        if best is None:
-            st.html(
-                '<p class="ag-note">No single revocation closes this path: another route remains after each one.</p>'
-            )
-        st.html(
-            f'<p class="ag-note">Revoke <span class="ag-mono">{web.esc(chosen.fact_id)}</span> '
-            f"({web.esc(human)}) on an in-memory copy of the proposal, then rerun the whole analysis.</p>"
-        )
+        st.html(page.fix_intro(chosen, best, story))
         buttons = st.container(horizontal=True)
         buttons.button(
             "Simulate the fix",
@@ -463,43 +235,9 @@ def fix_card(result: PipelineResult, delta, story) -> None:
             args=(comparison.analysis_id, chosen.id),
             key=f"simulate-{delta.id}",
         )
-        snapshot = comparison.proposal.snapshot
-        rows = []
-        for row in comparison.proposal.expected_access:
-            after = sim.simulated.expected_result(row.check.id) if sim else None
-            rows.append((expected_text(row.check, snapshot), row.result, after.result if after else None))
-        if rows:
-            st.html('<p class="ag-note" style="margin-top:14px">Normal access the fix must keep:</p>' + web.expected_list(rows))
         if sim is not None:
             buttons.button("Reset simulation", on_click=stop_simulation, key=f"reset-sim-{delta.id}")
-            kept = sum(1 for r in sim.expected_after if r.result == "pass")
-            verified = sim.verified_for(delta.id)
-            st.html(
-                web.stats(
-                    [
-                        (
-                            "High-risk paths",
-                            f"{comparison.proposal.high_risk_count} → {sim.simulated.high_risk_count}",
-                            "Proposed, then after the fix",
-                            "good" if not sim.remaining else "risk",
-                        ),
-                        (
-                            "Normal access",
-                            f"{kept} of {len(sim.expected_after)}",
-                            "Expected-access checks that still pass",
-                            "good" if kept == len(sim.expected_after) else "risk",
-                        ),
-                    ],
-                    columns=2,
-                )
-                + (
-                    '<p class="ag-note"><span class="ag-badge green">Verified in this model</span> The path is gone and '
-                    "every relationship stayed resolved. The uploaded files are unchanged.</p>"
-                    if verified
-                    else '<p class="ag-note"><span class="ag-badge amber">Not verified</span> The finding remains, or '
-                    "coverage became incomplete after the change.</p>"
-                )
-            )
+        st.html(page.expected_block(comparison, sim) + (page.fix_result(comparison, delta, sim) if sim else ""))
 
 
 def prerequisite_table(candidate, comparison) -> str:
@@ -652,20 +390,21 @@ def demo_section() -> None:
         )
         return
     if not result.ok:
-        invalid_state(result)
+        st.html(page.invalid(result))
         return
-    verdict_block(result)
-    stats_block(result)
+    sim = active_simulation(result)
+    st.html(page.verdict(result) + page.stats(result, sim))
     comparison = result.comparison
     delta = choose_finding(comparison)
     if delta is not None:
         story = build_story(comparison, delta)
-        path_card(result, story)
+        with st.container(key="agcard-path"):
+            st.html(page.path_card(story, sim))
         left, right = st.columns([2, 3], gap="medium")
-        with left:
-            change_card(comparison, story)
-        with right:
-            conditions_card(story)
+        with left, st.container(key="agcard-change"):
+            st.html(page.change_card(comparison, story))
+        with right, st.container(key="agcard-conds"):
+            st.html(page.conditions_card(story))
         left, right = st.columns(2, gap="medium")
         with left:
             ai_card(result, delta, story)
