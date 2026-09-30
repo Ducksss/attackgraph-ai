@@ -420,6 +420,8 @@ fixtures/examples/             unknown fact, unresolved SCP, label injection, in
 snapshots/                     the snapshot the pull-request check watches (the demo baseline)
 scripts/check_bedrock.py       Bedrock access and AC-9 evidence
 scripts/build_site.py          static build of both pages for Vercel
+scripts/build_assets.py        README screenshots, brand kit and Devpost images, rendered with headless Chrome
+scripts/assets/shoot.mjs       the headless-Chrome renderer it drives
 .github/workflows/             permission-check.yml: the pull-request check
 site/                          the built site: index.html, demo/, reports/, vercel.json
 docs/brand/                    logo, palette, social preview and brand guide
