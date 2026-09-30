@@ -8,7 +8,7 @@ AttackGraph AI
 
 ## Elevator pitch
 
-Pick one; each fits Devpost's 200-character limit. A review flagged "proves the fix" as an overclaim, because the product itself says "Verified in this model", so the first two say "tests the fix". The site's hero and the README intro still say "proves", so whichever you pick, use it everywhere.
+Pick one; each fits Devpost's 200-character limit. Both say "tests the fix", matching the product's "Verified in this model".
 
 185 characters:
 
@@ -17,10 +17,6 @@ Pick one; each fits Devpost's 200-character limit. A review flagged "proves the 
 180 characters:
 
 > One IAM change can hand your build pipeline admin. AttackGraph AI finds the new route, explains it with Amazon Bedrock, tests the fix and blocks the pull request on the exact line.
-
-186 characters, the original wording:
-
-> See what a cloud permission change unlocks before you deploy it: AttackGraph AI finds the new route to admin, explains it with Amazon Bedrock, proves the fix and blocks the pull request.
 
 ## Thumbnail
 

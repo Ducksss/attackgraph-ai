@@ -263,7 +263,7 @@ def hero(result: PipelineResult) -> str:
         '<section class="ag-hero" id="top">'
         f'<span class="ag-pill">{icon("verified_user")}Pre-deployment review for cloud permission changes</span>'
         '<h1 class="ag-h1">Ship permission changes without shipping admin access.</h1>'
-        '<p class="ag-lead">AttackGraph AI finds new routes to admin roles and sensitive data in a cloud change, then proves the fix.</p>'
+        '<p class="ag-lead">AttackGraph AI finds new routes to admin roles and sensitive data in a cloud change, then tests the fix.</p>'
         f'<div class="ag-cta"><a class="ag-btn ag-btn-primary" href="{web.DEMO}">Open the live demo</a>'
         '<a class="ag-btn ag-btn-ghost" href="#why">Why it matters</a></div>'
         + pipeline_flow(result)

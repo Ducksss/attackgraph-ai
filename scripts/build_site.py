@@ -362,7 +362,7 @@ HEAD = (
     '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
     "<title>{title}</title>\n"
     '<meta name="description" content="AttackGraph AI finds new routes to admin roles and sensitive data in a proposed '
-    'cloud change, explains them with Amazon Bedrock, and proves the fix.">\n'
+    'cloud change, explains them with Amazon Bedrock, and tests the fix.">\n'
     '<meta name="theme-color" content="#f9f9fa">\n'
     f'<link rel="icon" href="{FAVICON}">\n'
     '<link rel="preconnect" href="https://fonts.googleapis.com">\n'

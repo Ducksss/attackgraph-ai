@@ -90,7 +90,7 @@
 
 [![AttackGraph AI overview: a pull request widens iam:PassRole, completes all 7 conditions of a route to the admin role, and the engine reports the new path and a verified fix][product-screenshot]](https://attackgraph-ai.vercel.app)
 
-A pull request that widens one IAM permission can quietly let a build pipeline run code as an administrator. Code review sees the changed line. AttackGraph AI compares the current and proposed configuration, draws the exact route that line opens, explains it in plain English with Amazon Bedrock, and proves which single revocation closes it.
+A pull request that widens one IAM permission can quietly let a build pipeline run code as an administrator. Code review sees the changed line. AttackGraph AI compares the current and proposed configuration, draws the exact route that line opens, explains it in plain English with Amazon Bedrock, and tests which single revocation closes it.
 
 It is a static, defensive review prototype built for the AWS Build Beyond Student AI Demo Challenge 2026. It reads synthetic JSON snapshots, never connects to the accounts they describe, and never deploys or executes anything. Its only AWS call is the Bedrock request for explanation text.
 
