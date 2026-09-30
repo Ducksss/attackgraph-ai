@@ -1,9 +1,11 @@
 """AC-11: the Streamlit app's two pages, driven headlessly with streamlit.testing."""
 
+import json
+
 import pytest
 from helpers import ROOT
 from streamlit.testing.v1 import AppTest
-from test_explain import FakeClient
+from test_explain import AC9_RUNS, FakeClient
 
 from attackgraph.explain import BedrockExplainer, configured_model
 
@@ -102,6 +104,17 @@ def test_bedrock_failure_keeps_results_and_shows_the_deterministic_summary(app):
     assert "AI explanation unavailable" in texts(app.warning)
     assert "Deterministic summary, not AI-generated" in texts(app.markdown)
     assert "1 new path to a protected role" in html(app)
+
+
+def test_reply_that_overstates_the_fix_is_rejected_with_its_reason(app):
+    run10 = next(run for run in AC9_RUNS if run["run"] == 10)  # "without affecting other access relationships"
+    model_id, region = configured_model()
+    app.session_state["explainer"] = BedrockExplainer(model_id, region, client=FakeClient(reply=json.dumps(run10["reply"])))
+    click(app, "Explain with Amazon Bedrock")
+    warning = texts(app.warning)
+    assert "AI explanation unavailable** (reply rejected)" in warning and "other access relationships" in warning
+    assert "Deterministic summary, not AI-generated" in texts(app.markdown)
+    assert '<span class="ag-badge green">AI explanation</span>' not in html(app)
 
 
 def test_simulated_fix_closes_the_path_and_reset_restores_it(app):
