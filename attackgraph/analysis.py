@@ -6,12 +6,22 @@ leaves it unresolved; otherwise the candidate is established. Only
 established candidates become witness edges. Unresolved candidates make
 coverage incomplete and can only produce inconclusive results, never a safe
 verdict.
+
+Rule B has a candidate for every evaluated subject, every other role and
+every Lambda workload, so a file at the input limits can have well over
+100,000. They are evaluated one row at a time, a row being one subject and
+one role across all workloads, and each row is memoised under every input it
+reads: the facts, node accounts and pointers involved, the workload list and
+the policy prerequisite. An analysis that reuses another (the proposal after
+the baseline, a fix simulation after the proposal) takes the rows whose
+inputs are unchanged and evaluates the rest. Which subjects are evaluated,
+the witnesses, coverage and findings are always recomputed in full.
 """
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict, deque
-from dataclasses import dataclass
+from collections import defaultdict, deque
+from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Iterable
 
@@ -46,6 +56,14 @@ def kleene_and(states: Iterable[str]) -> str:
     if UNKNOWN in states:
         return UNKNOWN
     return TRUE
+
+
+# kleene_and as a minimum: false < unknown < true, and any other value counts as true, as it does there.
+_STATES = (FALSE, UNKNOWN, TRUE)
+
+
+def _rank(state: str) -> int:
+    return 0 if state == FALSE else 1 if state == UNKNOWN else 2
 
 
 def finding_id(entry: str, target: str, impact: str) -> str:
@@ -178,6 +196,19 @@ class Coverage:
     notes: tuple[str, ...]
 
 
+class _Memo:
+    """Evaluated candidates keyed by every input they read, so equal inputs are evaluated once.
+
+    A key holds values, never object identities, so analyses of different
+    snapshots can share one memo: a row is taken only when every fact, node
+    account and pointer, workload and policy state it depends on is equal.
+    """
+
+    def __init__(self) -> None:
+        self.s3: dict[tuple, _S3Part] = {}
+        self.contexts: dict[tuple, _Context] = {}
+
+
 @dataclass(frozen=True, eq=False)
 class SnapshotAnalysis:
     snapshot: Snapshot
@@ -186,11 +217,21 @@ class SnapshotAnalysis:
     potential: dict[str, PotentialFinding]
     expected_access: tuple[ExpectedAccessResult, ...]
     coverage: Coverage
-    graph: nx.MultiDiGraph
+    _memo: _Memo = field(default_factory=_Memo, repr=False)
 
     @property
     def high_risk_count(self) -> int:
         return len(self.findings)
+
+    @cached_property
+    def graph(self) -> nx.MultiDiGraph:
+        """Every candidate that is not blocked, as an edge keyed by its ID; built on first use."""
+        graph = nx.MultiDiGraph()
+        graph.add_nodes_from(sorted(self.snapshot.nodes))
+        for candidate in sorted(self.candidates.values(), key=lambda c: c.id):
+            if candidate.state != FALSE:
+                graph.add_edge(candidate.subject, candidate.target, key=candidate.id, candidate=candidate)
+        return graph
 
     @cached_property
     def established_graph(self) -> nx.MultiDiGraph:
@@ -245,11 +286,10 @@ def _policy_prerequisite(snapshot: Snapshot) -> Prerequisite:
     return Prerequisite("policy_controls_resolved", text, TRUE, "derived", pointers=(pointer("coverage", "policy_controls"),))
 
 
-def _same_account_prerequisite(snapshot: Snapshot, subject: str, role: str, workload: str) -> Prerequisite:
-    nodes = [snapshot.nodes[node_id] for node_id in (subject, role, workload)]
-    pointers = tuple(f"{node.pointer}/account_id" for node in nodes)
+def _same_account_prerequisite(subject: str, role: str, workload: str, same: bool, pointers: tuple[str, ...]) -> Prerequisite:
+    """same is whether the three nodes share one account_id; pointers are their account_id pointers, in order."""
     text = f"{subject}, {role} and {workload} are in the same synthetic account"
-    if len({node.account_id for node in nodes}) == 1:
+    if same:
         return Prerequisite("same_account", text, TRUE, "derived", pointers=pointers)
     return Prerequisite(
         "same_account",
@@ -274,28 +314,225 @@ def _s3_candidate(snapshot: Snapshot, subject: str, obj: str, policy: Prerequisi
     )
 
 
-def _lambda_candidate(snapshot: Snapshot, subject: str, role: str, workload: str, policy: Prerequisite) -> Candidate:
-    prerequisites = (
-        _fact_prerequisite(snapshot, "iam_pass_role_to_lambda", subject, role),
-        _fact_prerequisite(snapshot, "lambda_create_function", subject, workload),
-        _fact_prerequisite(snapshot, "lambda_invoke_function", subject, workload),
-        _fact_prerequisite(snapshot, "controls_workload_code", subject, workload),
-        _fact_prerequisite(snapshot, "role_trusts_lambda_service", role, None),
-        _same_account_prerequisite(snapshot, subject, role, workload),
-        policy,
-    )
-    return Candidate(
-        f"B:{subject}->{role}@{workload}",
-        RULE_LAMBDA,
-        subject,
-        role,
-        workload,
-        prerequisites,
-        kleene_and(p.state for p in prerequisites),
+def _unresolved_issue(candidate: Candidate) -> CoverageIssue:
+    reasons, pointers = _unknown(candidate.prerequisites)
+    return _issue(candidate, reasons, pointers)
+
+
+def _unknown(prerequisites: Iterable[Prerequisite]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The reasons and pointers of the unknown prerequisites, in prerequisite order."""
+    unknown = [p for p in prerequisites if p.state == UNKNOWN]
+    return tuple(p.unresolved_reason() for p in unknown), tuple(ptr for p in unknown for ptr in p.pointers)
+
+
+def _issue(candidate: Candidate, reasons: tuple[str, ...], pointers: tuple[str, ...]) -> CoverageIssue:
+    """The coverage issue of an unknown candidate, from the _unknown() of its prerequisites."""
+    return CoverageIssue(
+        "unresolved_candidate",
+        f"{candidate.describe()}: unresolved because " + "; ".join(reasons),
+        _unique(pointers) if pointers else (),
+        candidate.id,
     )
 
 
-def _generate(snapshot: Snapshot) -> tuple[dict[str, Candidate], dict[str, tuple[Candidate, ...]], list[str]]:
+class _Inputs:
+    """What candidate evaluation reads from one snapshot, indexed once per analysis."""
+
+    def __init__(self, snapshot: Snapshot) -> None:
+        self.snapshot = snapshot
+        self.policy = _policy_prerequisite(snapshot)
+        self.policy_unknown = _unknown((self.policy,))
+        self.roles = snapshot.nodes_of_kind("role")
+        self.workloads = snapshot.nodes_of_kind("lambda")
+        self.objects = {
+            t.node for t in snapshot.protected_targets.values() if t.classification == "sensitive_object"
+        } | {c.target for c in snapshot.expected_access if c.relationship == "object_read"}
+        self.declared_reads: dict[str, set[str]] = defaultdict(set)
+        for fact in snapshot.facts.values():
+            if fact.predicate == "s3_get_object":
+                self.declared_reads[fact.subject].add(fact.object)
+        # Memo keys: every value a prerequisite copies from a fact or a node.
+        self.fact_keys = {triple: (f.id, f.state, f.pointer) for triple, f in snapshot.fact_index.items()}
+        self.node_keys = {node_id: (n.account_id, n.pointer) for node_id, n in snapshot.nodes.items()}
+
+    def objects_for(self, subject: str) -> list[str]:
+        """Rule A objects: protected or expected-access objects, plus those the subject has a read fact for."""
+        return sorted(self.objects | self.declared_reads.get(subject, set()))
+
+    def s3_key(self, subject: str, objects: list[str]) -> tuple:
+        get = self.fact_keys.get
+        return (subject, self.policy, tuple((obj, get(("s3_get_object", subject, obj))) for obj in objects))
+
+    def context_key(self, subject: str) -> tuple:
+        get = self.fact_keys.get
+        return (
+            subject,
+            self.node_keys.get(subject),
+            self.policy,
+            tuple(
+                (
+                    workload,
+                    self.node_keys[workload],
+                    get(("lambda_create_function", subject, workload)),
+                    get(("lambda_invoke_function", subject, workload)),
+                    get(("controls_workload_code", subject, workload)),
+                )
+                for workload in self.workloads
+            ),
+        )
+
+    def row_key(self, subject: str, role: str) -> tuple:
+        get = self.fact_keys.get
+        return (
+            role,
+            self.node_keys[role],
+            get(("iam_pass_role_to_lambda", subject, role)),
+            get(("role_trusts_lambda_service", role, None)),
+        )
+
+
+class _S3Part:
+    """A subject's Rule A candidates, one per object in objects_for order."""
+
+    __slots__ = ("pairs", "issues", "counts", "established", "possible")
+
+    def __init__(self, inputs: _Inputs, subject: str, objects: list[str]) -> None:
+        candidates = [_s3_candidate(inputs.snapshot, subject, obj, inputs.policy) for obj in objects]
+        self.pairs = [(c.id, c) for c in candidates]
+        # Object order is candidate-ID order within one subject.
+        self.issues = [_unresolved_issue(c) for c in candidates if c.state == UNKNOWN]
+        self.counts = [0, 0, 0]
+        for c in candidates:
+            self.counts[_rank(c.state)] += 1
+        self.established = [(c.target, c) for c in candidates if c.state == TRUE]
+        self.possible = [(c.target, c) for c in candidates if c.state != FALSE]
+
+
+class _Context:
+    """What every Rule B candidate of one subject shares: its node, the policy and each workload's facts."""
+
+    __slots__ = ("account", "account_pointer", "columns", "rows")
+
+    def __init__(self, inputs: _Inputs, subject: str) -> None:
+        snapshot = inputs.snapshot
+        node = snapshot.nodes[subject]
+        self.account = node.account_id
+        self.account_pointer = f"{node.pointer}/account_id"
+        self.columns = []
+        for workload in inputs.workloads:
+            w_node = snapshot.nodes[workload]
+            create = _fact_prerequisite(snapshot, "lambda_create_function", subject, workload)
+            invoke = _fact_prerequisite(snapshot, "lambda_invoke_function", subject, workload)
+            controls = _fact_prerequisite(snapshot, "controls_workload_code", subject, workload)
+            rank = min(_rank(create.state), _rank(invoke.state), _rank(controls.state))
+            self.columns.append(
+                (
+                    workload,
+                    w_node.account_id,
+                    f"{w_node.pointer}/account_id",
+                    create,
+                    invoke,
+                    controls,
+                    rank,
+                    _unknown((create, invoke, controls)),
+                )
+            )
+        self.rows: dict[tuple, _Row] = {}
+
+
+class _Row:
+    """The Rule B candidates from one subject to one role, one per workload in workload order.
+
+    Within a row, workload order is candidate-ID order, so the coverage issues
+    are kept in that order. An issue lists the unknown prerequisites in
+    prerequisite order: pass role, the workload's three, trust, same account,
+    policy. The shared ones are worked out once per row or per workload.
+    """
+
+    __slots__ = ("pairs", "issues", "counts", "_best")
+
+    def __init__(self, inputs: _Inputs, context: _Context, subject: str, role: str) -> None:
+        snapshot = inputs.snapshot
+        policy = inputs.policy
+        passed = _fact_prerequisite(snapshot, "iam_pass_role_to_lambda", subject, role)
+        trusted = _fact_prerequisite(snapshot, "role_trusts_lambda_service", role, None)
+        r_node = snapshot.nodes[role]
+        account, s_pointer = context.account, context.account_pointer
+        r_account, r_pointer = r_node.account_id, f"{r_node.pointer}/account_id"
+        head = min(_rank(passed.state), _rank(trusted.state), _rank(policy.state))
+        (pass_reasons, pass_pointers), (trust_reasons, trust_pointers) = _unknown((passed,)), _unknown((trusted,))
+        policy_reasons, policy_pointers = inputs.policy_unknown
+        self.pairs: list[tuple[str, Candidate]] = []
+        self.issues: list[CoverageIssue] = []
+        self.counts = [0, 0, 0]
+        for workload, w_account, w_pointer, create, invoke, controls, rank, (w_reasons, w_pointers) in context.columns:
+            same = _same_account_prerequisite(
+                subject, role, workload, account == r_account == w_account, (s_pointer, r_pointer, w_pointer)
+            )
+            state = min(head, rank, _rank(same.state))
+            candidate = Candidate(
+                f"B:{subject}->{role}@{workload}",
+                RULE_LAMBDA,
+                subject,
+                role,
+                workload,
+                (passed, create, invoke, controls, trusted, same, policy),
+                _STATES[state],
+            )
+            self.pairs.append((candidate.id, candidate))
+            self.counts[state] += 1
+            if state == 1:
+                same_reasons, same_pointers = ((same.unresolved_reason(),), same.pointers) if same.state == UNKNOWN else ((), ())
+                self.issues.append(
+                    _issue(
+                        candidate,
+                        pass_reasons + w_reasons + trust_reasons + same_reasons + policy_reasons,
+                        pass_pointers + w_pointers + trust_pointers + same_pointers + policy_pointers,
+                    )
+                )
+        self._best: dict[bool, Candidate] = {}
+
+    def reaches(self, established: bool) -> bool:
+        """Whether the row has an edge in the established graph (true) or the full graph (not false)."""
+        return self.counts[2] > 0 if established else self.counts[1] + self.counts[2] > 0
+
+    def best(self, established: bool) -> Candidate:
+        """The edge a witness takes to this role: the lowest sort key among the row's edges."""
+        if established not in self._best:
+            edges = [c for _, c in self.pairs if (c.state == TRUE if established else c.state != FALSE)]
+            self._best[established] = min(edges, key=lambda c: c.sort_key)
+        return self._best[established]
+
+
+class _Subject:
+    """One evaluated subject's candidates: Rule A, then one Rule B row per other role, in role order."""
+
+    __slots__ = ("s3", "rows")
+
+    def __init__(self, inputs: _Inputs, memo: _Memo, subject: str) -> None:
+        objects = inputs.objects_for(subject)
+        key = inputs.s3_key(subject, objects)
+        s3 = memo.s3.get(key)
+        if s3 is None:
+            s3 = memo.s3[key] = _S3Part(inputs, subject, objects)
+        self.s3 = s3
+        self.rows: dict[str, _Row] = {}
+        roles = [role for role in inputs.roles if role != subject]
+        if not roles:
+            return
+        context_key = inputs.context_key(subject)
+        context = memo.contexts.get(context_key)
+        if context is None:
+            context = memo.contexts[context_key] = _Context(inputs, subject)
+        for role in roles:
+            row_key = inputs.row_key(subject, role)
+            row = context.rows.get(row_key)
+            if row is None:
+                row = context.rows[row_key] = _Row(inputs, context, subject, role)
+            self.rows[role] = row
+
+
+def _generate(inputs: _Inputs, memo: _Memo) -> dict[str, _Subject]:
     """Evaluate every candidate from subjects that are, or may be, reachable.
 
     Rule A covers S3 objects that are protected or named in an expected-access
@@ -303,73 +540,56 @@ def _generate(snapshot: Snapshot) -> tuple[dict[str, Candidate], dict[str, tuple
     Rule B covers every other role through every represented Lambda workload.
     Missing prerequisites are unknown, so an undeclared relationship from a
     reachable subject makes coverage incomplete rather than silently safe.
+    Subjects are evaluated breadth first from the entry principals, in sorted
+    order; a role is queued, once, the first time a candidate to it is not
+    false.
     """
-    policy = _policy_prerequisite(snapshot)
-    roles = snapshot.nodes_of_kind("role")
-    workloads = snapshot.nodes_of_kind("lambda")
-    relevant_objects = {
-        t.node for t in snapshot.protected_targets.values() if t.classification == "sensitive_object"
-    } | {c.target for c in snapshot.expected_access if c.relationship == "object_read"}
-    declared_reads: dict[str, set[str]] = defaultdict(set)
-    for fact in snapshot.facts.values():
-        if fact.predicate == "s3_get_object":
-            declared_reads[fact.subject].add(fact.object)
-
-    candidates: dict[str, Candidate] = {}
-    by_subject: dict[str, tuple[Candidate, ...]] = {}
-    queue = deque(sorted(snapshot.entry_principals))
+    subjects: dict[str, _Subject] = {}
+    queue = deque(sorted(inputs.snapshot.entry_principals))
+    queued = set(queue)
     while queue:
         subject = queue.popleft()
-        if subject in by_subject:
+        if subject in subjects:
             continue
-        outgoing = [
-            _s3_candidate(snapshot, subject, obj, policy)
-            for obj in sorted(relevant_objects | declared_reads.get(subject, set()))
-        ]
-        for role in roles:
-            if role == subject:
-                continue
-            for workload in workloads:
-                candidate = _lambda_candidate(snapshot, subject, role, workload, policy)
-                outgoing.append(candidate)
-                if candidate.state != FALSE and role not in by_subject:
-                    queue.append(role)
-        by_subject[subject] = tuple(outgoing)
-        candidates.update((c.id, c) for c in outgoing)
-
-    notes = [
-        "Candidates are evaluated for every subject that is reachable, or possibly reachable, from an entry principal.",
-        "Rule A evaluates S3 objects that are protected or named in an expected-access check, plus objects with a declared s3_get_object fact.",
-    ]
-    if not workloads:
-        notes.append("No Lambda workload is represented, so Rule B has no candidates.")
-    return candidates, by_subject, notes
+        evaluated = subjects[subject] = _Subject(inputs, memo, subject)
+        for role, row in evaluated.rows.items():
+            if role not in queued and row.reaches(established=False):
+                queued.add(role)
+                queue.append(role)
+    return subjects
 
 
-def _witnesses(graph: nx.MultiDiGraph, source: str) -> dict[str, tuple[Candidate, ...]]:
+def _witnesses(subjects: dict[str, _Subject], source: str, established: bool) -> dict[str, tuple[Candidate, ...]]:
     """Shortest witness to every reachable node, ties broken by fact IDs.
 
     Layered BFS with a visited set: each node is settled at its first layer,
-    so cycles terminate and all simple paths are never enumerated.
+    so cycles terminate and all simple paths are never enumerated. A path's key
+    is its candidates' sort keys in order, and the witness to a node is the
+    lowest-key extension of a witness one layer up. Keys of one layer are
+    distinct, so each layer is ordered by key once: by the rank of the parent,
+    then the sort key of the last step. The first parent in that order to
+    reach a node gives it its witness, through its lowest-key edge there.
     """
     best: dict[str, tuple[Candidate, ...]] = {source: ()}
     layer = [source]
     while layer:
-        reached: dict[str, tuple[Candidate, ...]] = {}
-        for node in layer:
-            for _, target, data in graph.out_edges(node, data=True):
-                if target in best:
-                    continue
-                path = best[node] + (data["candidate"],)
-                if target not in reached or _path_key(path) < _path_key(reached[target]):
-                    reached[target] = path
-        best.update(reached)
-        layer = sorted(reached)
+        reached: dict[str, tuple[int, Candidate]] = {}
+        for rank, node in enumerate(layer):
+            subject = subjects.get(node)
+            if subject is None:
+                continue
+            for target, candidate in subject.s3.established if established else subject.s3.possible:
+                if target not in best and target not in reached:
+                    reached[target] = (rank, candidate)
+            for target, row in subject.rows.items():
+                if target not in best and target not in reached and row.reaches(established):
+                    reached[target] = (rank, row.best(established))
+        order = sorted(reached, key=lambda node: (reached[node][0], reached[node][1].sort_key))
+        for node in order:
+            rank, candidate = reached[node]
+            best[node] = best[layer[rank]] + (candidate,)
+        layer = order
     return best
-
-
-def _path_key(path: tuple[Candidate, ...]) -> tuple:
-    return tuple(c.sort_key for c in path)
 
 
 def _assumptions(entry: str, witness: tuple[Candidate, ...]) -> tuple[str, ...]:
@@ -388,7 +608,8 @@ def _assumptions(entry: str, witness: tuple[Candidate, ...]) -> tuple[str, ...]:
     return _unique(out)
 
 
-def _coverage(snapshot: Snapshot, candidates: dict[str, Candidate], by_subject: dict, notes: list[str]) -> Coverage:
+def _coverage(inputs: _Inputs, subjects: dict[str, _Subject]) -> Coverage:
+    snapshot = inputs.snapshot
     issues: list[CoverageIssue] = []
     for key, title in POLICY_CONTROLS.items():
         if snapshot.policy_controls[key] != "resolved":
@@ -409,24 +630,39 @@ def _coverage(snapshot: Snapshot, candidates: dict[str, Candidate], by_subject: 
                 (pointer("coverage", "unmodelled_mechanisms", i),),
             )
         )
-    counts: dict[str, Counter] = {RULE_S3: Counter(), RULE_LAMBDA: Counter()}
-    for candidate in sorted(candidates.values(), key=lambda c: c.id):
-        counts[candidate.rule][candidate.state] += 1
-        if candidate.state == UNKNOWN:
-            unknown = [p for p in candidate.prerequisites if p.state == UNKNOWN]
-            issues.append(
-                CoverageIssue(
-                    "unresolved_candidate",
-                    f"{candidate.describe()}: unresolved because " + "; ".join(p.unresolved_reason() for p in unknown),
-                    _unique(ptr for p in unknown for ptr in p.pointers),
-                    candidate.id,
-                )
-            )
+    # Unresolved candidates in candidate-ID order, without sorting the IDs. An ID is
+    # "A:<subject>-><object>" or "B:<subject>-><role>@<workload>", and IDs never contain
+    # '>' or '@', so every A sorts before every B, subjects sort as "<subject>->",
+    # roles as "<role>@", and objects and workloads as themselves.
+    by_subject = sorted(subjects, key=lambda subject: subject + "->")
+    by_role = sorted(inputs.roles, key=lambda role: role + "@")
+    for subject in by_subject:
+        issues.extend(subjects[subject].s3.issues)
+    for subject in by_subject:
+        rows = subjects[subject].rows
+        for role in by_role:
+            row = rows.get(role)
+            if row is not None:
+                issues.extend(row.issues)
+
+    s3, lam = [0, 0, 0], [0, 0, 0]
+    for evaluated in subjects.values():
+        for i, n in enumerate(evaluated.s3.counts):
+            s3[i] += n
+        for row in evaluated.rows.values():
+            for i, n in enumerate(row.counts):
+                lam[i] += n
+    notes = [
+        "Candidates are evaluated for every subject that is reachable, or possibly reachable, from an entry principal.",
+        "Rule A evaluates S3 objects that are protected or named in an expected-access check, plus objects with a declared s3_get_object fact.",
+    ]
+    if not inputs.workloads:
+        notes.append("No Lambda workload is represented, so Rule B has no candidates.")
     return Coverage(
         complete=not issues,
         issues=tuple(issues),
-        candidate_counts={rule: {s: c[s] for s in (TRUE, FALSE, UNKNOWN)} for rule, c in counts.items()},
-        subjects_evaluated=tuple(sorted(by_subject)),
+        candidate_counts={rule: {TRUE: c[2], FALSE: c[0], UNKNOWN: c[1]} for rule, c in ((RULE_S3, s3), (RULE_LAMBDA, lam))},
+        subjects_evaluated=tuple(sorted(subjects)),
         notes=tuple(notes),
     )
 
@@ -439,22 +675,24 @@ def _expected(check: ExpectedAccess, definite: dict, possible: dict) -> Expected
     return ExpectedAccessResult(check, "fail", ())
 
 
-def analyze(snapshot: Snapshot) -> SnapshotAnalysis:
-    candidates, by_subject, notes = _generate(snapshot)
-    graph = nx.MultiDiGraph()
-    graph.add_nodes_from(sorted(snapshot.nodes))
-    for candidate in sorted(candidates.values(), key=lambda c: c.id):
-        if candidate.state != FALSE:
-            graph.add_edge(candidate.subject, candidate.target, key=candidate.id, candidate=candidate)
-    established = established_view(graph)
+def analyze(snapshot: Snapshot, reuse: SnapshotAnalysis | None = None) -> SnapshotAnalysis:
+    """Analyse a snapshot; with reuse, candidates whose inputs match that analysis's are taken from it."""
+    memo = reuse._memo if reuse is not None else _Memo()
+    inputs = _Inputs(snapshot)
+    subjects = _generate(inputs, memo)
+    candidates: dict[str, Candidate] = {}
+    for evaluated in subjects.values():
+        candidates.update(evaluated.s3.pairs)
+        for row in evaluated.rows.values():
+            candidates.update(row.pairs)
 
     findings: dict[str, Finding] = {}
     potential: dict[str, PotentialFinding] = {}
     definite_by_entry: dict[str, dict] = {}
     possible_by_entry: dict[str, dict] = {}
     for entry in sorted(snapshot.entry_principals):
-        definite = definite_by_entry[entry] = _witnesses(established, entry)
-        possible = possible_by_entry[entry] = _witnesses(graph, entry)
+        definite = definite_by_entry[entry] = _witnesses(subjects, entry, established=True)
+        possible = possible_by_entry[entry] = _witnesses(subjects, entry, established=False)
         for target_id in sorted(snapshot.protected_targets):
             target = snapshot.protected_targets[target_id]
             impact = IMPACTS[target.classification]
@@ -475,6 +713,6 @@ def analyze(snapshot: Snapshot) -> SnapshotAnalysis:
         findings=findings,
         potential=potential,
         expected_access=expected,
-        coverage=_coverage(snapshot, candidates, by_subject, notes),
-        graph=graph,
+        coverage=_coverage(inputs, subjects),
+        _memo=memo,
     )

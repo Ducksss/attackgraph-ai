@@ -272,4 +272,6 @@ def compare(baseline: SnapshotAnalysis, proposal: SnapshotAnalysis) -> Compariso
 
 
 def compare_snapshots(baseline: Snapshot, proposal: Snapshot) -> Comparison:
-    return compare(analyze(baseline), analyze(proposal))
+    # A proposal usually changes a few facts, so it reuses most of the baseline's evaluated candidates.
+    before = analyze(baseline)
+    return compare(before, analyze(proposal, reuse=before))
