@@ -234,7 +234,7 @@ The other scenarios show a comparison that closes the path, an unknown fact that
 
 Streamlit needs a long-lived WebSocket server, which Vercel does not run, so the hosted site is a static build. `scripts/build_site.py` runs the engine on every bundled scenario and renders the overview to `site/index.html` and the demo to `site/demo/index.html`, using the same card code as the app. The scenario tabs and the fix toggle switch between pre-computed states in the browser. The flagship's pull-request card comes from `attackgraph/pullrequest.py`, which runs the real check (`python -m attackgraph --github`, laid out as the workflow lays it out) on the pull-request and fix-commit versions of `snapshots/app-prod.json`, so its note and log are that command's output.
 
-The hosted pages make no AI calls and accept no uploads, as the PRD requires for anonymous visitors. The recorded Nova Pro reply appears only while its analysis ID and finding ID match the fresh analysis, so a change to the fixtures or rules hides it instead of showing a stale explanation. `tests/test_site.py` fails when the committed build is out of date.
+The hosted pages make no AI calls and accept no uploads, so an anonymous visitor cannot trigger a chargeable Bedrock call. The recorded Nova Pro reply appears only while its analysis ID and finding ID match the fresh analysis, so a change to the fixtures or rules hides it instead of showing a stale explanation. `tests/test_site.py` fails when the committed build is out of date.
 
 ```bash
 .venv/bin/python scripts/build_site.py
@@ -358,20 +358,20 @@ See the [open issues](https://github.com/Ducksss/attackgraph-ai/issues) for know
 <!-- ACCEPTANCE CRITERIA -->
 ## Acceptance criteria
 
-| ID | Where it is checked |
-|---|---|
-| AC-1 | `tests/test_rules.py::test_ac1_baseline_proposal_and_repair` |
-| AC-2 | `tests/test_rules.py`: each prerequisite false, cross-account, unresolved controls, PassRole alone |
-| AC-3 | `tests/test_compare.py` (unknown, unresolved, inconclusive transitions) and `tests/test_validation.py` (field-level errors) |
-| AC-4 | `tests/test_rules.py`: every pointer resolves to the supplied record; labels confer no privilege |
-| AC-5 | `tests/test_compare.py`: reordering, relabelling, removal, evidence change, severity, informational access |
-| AC-6 | `tests/test_rules.py`: alternative routes, no effective single fix, cycles, stable tie-breaks |
-| AC-7 | `tests/test_simulate.py`: verified fix, expected access kept, input bytes unchanged, ranking |
-| AC-8 | `tests/test_explain.py`: invalid IDs, malformed output, refusal, timeout, errors, cache, stale replies |
-| AC-9 | [Run on 29 September](docs/evidence/ac9-bedrock-review-2026-09-29.md) with `explain-v1`: 8 of 10 validated, no unsupported claims, wording defects fixed in `explain-v2`. Re-run `scripts/check_bedrock.py --invoke --repeat 10 --out ac9-review.md` for `explain-v2` and review every claim before recording |
-| AC-10 | `tests/test_explain.py` (no uploaded text in the prompt, escaping) and `tests/test_validation.py` (oversized and unsupported files) |
-| AC-11 | `tests/test_report.py`, `tests/test_app.py` (both pages), `tests/test_site.py` (hosted build); keyboard pass by hand |
-| AC-12 | Manual: fresh clone run, video in a signed-out browser, claims match this README |
+| ID | Criterion | Where it is checked |
+|---|---|---|
+| AC-1 | Baseline, proposal and repair | `tests/test_rules.py::test_ac1_baseline_proposal_and_repair` |
+| AC-2 | Each prerequisite false on its own | `tests/test_rules.py`: each prerequisite false, cross-account, unresolved controls, PassRole alone |
+| AC-3 | Unknown and unsupported input | `tests/test_compare.py` (unknown, unresolved, inconclusive transitions) and `tests/test_validation.py` (field-level errors) |
+| AC-4 | Evidence integrity | `tests/test_rules.py`: every pointer resolves to the supplied record; labels confer no privilege |
+| AC-5 | Stable comparison | `tests/test_compare.py`: reordering, relabelling, removal, evidence change, severity, informational access |
+| AC-6 | Alternative routes and cycles | `tests/test_rules.py`: alternative routes, no effective single fix, cycles, stable tie-breaks |
+| AC-7 | Useful fix simulation | `tests/test_simulate.py`: verified fix, expected access kept, input bytes unchanged, ranking |
+| AC-8 | Honest AI failure handling | `tests/test_explain.py`: invalid IDs, malformed output, refusal, timeout, errors, cache, stale replies |
+| AC-9 | Real Bedrock demonstration | [Run on 29 September](docs/evidence/ac9-bedrock-review-2026-09-29.md) with `explain-v1`: 8 of 10 validated, no unsupported claims, wording defects fixed in `explain-v2`. Re-run `scripts/check_bedrock.py --invoke --repeat 10 --out ac9-review.md` for `explain-v2` and review every claim before recording |
+| AC-10 | Trust boundaries | `tests/test_explain.py` (no uploaded text in the prompt, escaping) and `tests/test_validation.py` (oversized and unsupported files) |
+| AC-11 | UI and report | `tests/test_report.py`, `tests/test_app.py` (both pages), `tests/test_site.py` (hosted build); keyboard pass by hand |
+| AC-12 | Submission artefacts | Manual: fresh clone run, video in a signed-out browser, claims match this README |
 
 Performance, measured on the build laptop against the two-second target: the bundled comparison plus fix simulation takes about 5 ms. A generated 100-node, 300-fact pair compares in about 1.5 s, and each fix simulation on it adds about 0.7 s.
 
