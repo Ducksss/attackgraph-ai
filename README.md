@@ -90,7 +90,7 @@
 
 [![AttackGraph AI overview: a pull request widens iam:PassRole, completes all 7 conditions of a route to the admin role, and the engine reports the new path and a verified fix][product-screenshot]](https://attackgraph-ai.vercel.app)
 
-A pull request that widens one IAM permission can quietly let a build pipeline run code as an administrator. Code review sees the changed line. AttackGraph AI compares the current and proposed configuration, draws the exact route that line opens, explains it in plain English with Amazon Bedrock, and proves which single revocation closes it.
+A pull request that widens one IAM permission can quietly let a build pipeline run code as an administrator. Code review sees the changed line. AttackGraph AI compares the current and proposed configuration, draws the exact route that line opens, explains it in plain English with Amazon Bedrock, and tests which single revocation closes it.
 
 It is a static, defensive review prototype built for the AWS Build Beyond Student AI Demo Challenge 2026. It reads synthetic JSON snapshots, never connects to the accounts they describe, and never deploys or executes anything. Its only AWS call is the Bedrock request for explanation text.
 
@@ -202,7 +202,7 @@ The check sees only what the snapshots declare. Terraform and IAM policies are n
 | `ATTACKGRAPH_BEDROCK_REGION` | `AWS_REGION`, then `ap-southeast-1` | Bedrock runtime region |
 | `ATTACKGRAPH_AI` | `on` | `off` disables the explanation button, for example on a public host |
 
-The default is Amazon Nova Pro through the APAC cross-region inference profile, confirmed with live inference in `ap-southeast-1` on 29 September 2026. A newly created AWS account can return `AccessDeniedException: Your account is currently being verified` for up to about two hours; the app shows its fallback until then.
+The default is Amazon Nova Pro through the APAC cross-region inference profile, confirmed with live inference in `ap-southeast-1` on 29 and 30 September 2026. A newly created AWS account can return `AccessDeniedException: Your account is currently being verified` for up to about two hours; the app shows its fallback until then.
 
 Credentials come from the standard AWS credential chain of the machine running Streamlit. They never enter uploads, prompts, reports, logs or the browser. For the demo, use an IAM user or role limited to `bedrock:InvokeModel` on the inference profile and the foundation models it routes to, not root-user keys.
 
@@ -234,7 +234,7 @@ The other scenarios show a comparison that closes the path, an unknown fact that
 
 Streamlit needs a long-lived WebSocket server, which Vercel does not run, so the hosted site is a static build. `scripts/build_site.py` runs the engine on every bundled scenario and renders the overview to `site/index.html` and the demo to `site/demo/index.html`, using the same card code as the app. The scenario tabs and the fix toggle switch between pre-computed states in the browser. The flagship's pull-request card comes from `attackgraph/pullrequest.py`, which runs the real check (`python -m attackgraph --github`, laid out as the workflow lays it out) on the pull-request and fix-commit versions of `snapshots/app-prod.json`, so its note and log are that command's output.
 
-The hosted pages make no AI calls and accept no uploads, as the PRD requires for anonymous visitors. The recorded Nova Pro reply appears only while its analysis ID and finding ID match the fresh analysis, so a change to the fixtures or rules hides it instead of showing a stale explanation. `tests/test_site.py` fails when the committed build is out of date.
+The hosted pages make no AI calls and accept no uploads, so an anonymous visitor cannot trigger a chargeable Bedrock call. The recorded Nova Pro reply appears only while its analysis ID and finding ID match the fresh analysis, so a change to the fixtures or rules hides it instead of showing a stale explanation. `tests/test_site.py` fails when the committed build is out of date.
 
 ```bash
 .venv/bin/python scripts/build_site.py
@@ -337,11 +337,11 @@ State on 30 September 2026.
 
 - [x] Engine: validation, Rules A and B, comparison and fix simulation. The automated suite passes (`pytest`).
 - [x] Streamlit app: two pages styled after the [Close](https://closecrm.webflow.io/) template, an overview at `/` that explains why the check is needed and the live demo at `/demo`. Checked in a browser at desktop and phone widths in every scenario, and by headless `streamlit.testing` tests.
-- [x] Hosted site: [attackgraph-ai.vercel.app](https://attackgraph-ai.vercel.app), a static build of the same two pages for the bundled scenarios (see [Hosting](#hosting)). No uploads and no AI calls. The flagship scenario shows the recorded, reviewed Nova Pro reply from run 8 of the AC-9 evidence.
-- [x] Bedrock explanation: live on 29 September 2026, Amazon Nova Pro returned 8 validated explanations out of 10 with prompt `explain-v1`, none with an unsupported access or fix claim ([evidence](docs/evidence/ac9-bedrock-review-2026-09-29.md)).
+- [x] Hosted site: [attackgraph-ai.vercel.app](https://attackgraph-ai.vercel.app), a static build of the same two pages for the bundled scenarios (see [Hosting](#hosting)). No uploads and no AI calls. The flagship scenario shows the recorded, reviewed Nova Pro reply from run 5 of the 30 September AC-9 evidence.
+- [x] Bedrock explanation: live on 30 September 2026 with the current prompt `explain-v2`, Amazon Nova Pro returned 10 validated explanations out of 10, none with an unsupported access or fix claim; four overstate what the fix leaves untouched ([evidence](docs/evidence/ac9-bedrock-review-2026-09-30.md)). The first run, on 29 September with `explain-v1`, validated 8 of 10 ([evidence](docs/evidence/ac9-bedrock-review-2026-09-29.md)).
 - [x] Pull-request check: `python -m attackgraph` and a GitHub Actions workflow (see [Run it as a pull-request check](#run-it-as-a-pull-request-check)). Covered by `tests/test_cli.py`, and the workflow script was run against local merge commits for new, changed, renamed, deleted and broken snapshots. On GitHub on 30 September 2026 it passed the pull request that added it and failed the demo pull request ([#3](https://github.com/Ducksss/attackgraph-ai/pull/3)) as intended, with an annotation on line 27 of `snapshots/app-prod.json`.
 - [x] Brand kit and Devpost submission assets, in [`docs/brand/`](docs/brand/) and [`docs/devpost/`](docs/devpost/).
-- [ ] A live AC-9 run of `explain-v2`, which fixes the wording defects found in the first run
+- [x] A live AC-9 run of `explain-v2`, which fixes the wording defects found in the first run
 - [ ] Demo video
 - [ ] Beyond the prototype (not started)
     - [ ] Terraform plans and IAM policies as input, instead of hand-written snapshots
@@ -358,22 +358,22 @@ See the [open issues](https://github.com/Ducksss/attackgraph-ai/issues) for know
 <!-- ACCEPTANCE CRITERIA -->
 ## Acceptance criteria
 
-| ID | Where it is checked |
-|---|---|
-| AC-1 | `tests/test_rules.py::test_ac1_baseline_proposal_and_repair` |
-| AC-2 | `tests/test_rules.py`: each prerequisite false, cross-account, unresolved controls, PassRole alone |
-| AC-3 | `tests/test_compare.py` (unknown, unresolved, inconclusive transitions) and `tests/test_validation.py` (field-level errors) |
-| AC-4 | `tests/test_rules.py`: every pointer resolves to the supplied record; labels confer no privilege |
-| AC-5 | `tests/test_compare.py`: reordering, relabelling, removal, evidence change, severity, informational access |
-| AC-6 | `tests/test_rules.py`: alternative routes, no effective single fix, cycles, stable tie-breaks |
-| AC-7 | `tests/test_simulate.py`: verified fix, expected access kept, input bytes unchanged, ranking |
-| AC-8 | `tests/test_explain.py`: invalid IDs, malformed output, refusal, timeout, errors, cache, stale replies |
-| AC-9 | [Run on 29 September](docs/evidence/ac9-bedrock-review-2026-09-29.md) with `explain-v1`: 8 of 10 validated, no unsupported claims, wording defects fixed in `explain-v2`. Re-run `scripts/check_bedrock.py --invoke --repeat 10 --out ac9-review.md` for `explain-v2` and review every claim before recording |
-| AC-10 | `tests/test_explain.py` (no uploaded text in the prompt, escaping) and `tests/test_validation.py` (oversized and unsupported files) |
-| AC-11 | `tests/test_report.py`, `tests/test_app.py` (both pages), `tests/test_site.py` (hosted build); keyboard pass by hand |
-| AC-12 | Manual: fresh clone run, video in a signed-out browser, claims match this README |
+| ID | Criterion | Where it is checked |
+|---|---|---|
+| AC-1 | Baseline, proposal and repair | `tests/test_rules.py::test_ac1_baseline_proposal_and_repair` |
+| AC-2 | Each prerequisite false on its own | `tests/test_rules.py`: each prerequisite false, cross-account, unresolved controls, PassRole alone |
+| AC-3 | Unknown and unsupported input | `tests/test_compare.py` (unknown, unresolved, inconclusive transitions) and `tests/test_validation.py` (field-level errors) |
+| AC-4 | Evidence integrity | `tests/test_rules.py`: every pointer resolves to the supplied record; labels confer no privilege |
+| AC-5 | Stable comparison | `tests/test_compare.py`: reordering, relabelling, removal, evidence change, severity, informational access |
+| AC-6 | Alternative routes and cycles | `tests/test_rules.py`: alternative routes, no effective single fix, cycles, stable tie-breaks |
+| AC-7 | Useful fix simulation | `tests/test_simulate.py`: verified fix, expected access kept, input bytes unchanged, ranking |
+| AC-8 | Honest AI failure handling | `tests/test_explain.py`: invalid IDs, malformed output, refusal, timeout, errors, cache, stale replies |
+| AC-9 | Real Bedrock demonstration | [Run on 30 September](docs/evidence/ac9-bedrock-review-2026-09-30.md) with `explain-v2`: 10 of 10 validated, no unsupported access or fix claims; four replies overstate what the fix leaves untouched. The claim review is Claude's; run 5, the recorded reply, was also read and approved by a person. [First run on 29 September](docs/evidence/ac9-bedrock-review-2026-09-29.md) with `explain-v1`: 8 of 10 validated |
+| AC-10 | Trust boundaries | `tests/test_explain.py` (no uploaded text in the prompt, escaping) and `tests/test_validation.py` (oversized and unsupported files) |
+| AC-11 | UI and report | `tests/test_report.py`, `tests/test_app.py` (both pages), `tests/test_site.py` (hosted build); keyboard pass by hand |
+| AC-12 | Submission artefacts | Manual: fresh clone run, video in a signed-out browser, claims match this README |
 
-Performance, measured on the build laptop against the two-second target: the bundled comparison plus fix simulation takes about 5 ms. A generated 100-node, 300-fact pair compares in about 1.5 s, and each fix simulation on it adds about 0.7 s.
+Performance, measured on 30 September 2026 on the build laptop, against the two-second target for comparison plus fix simulation: the bundled scenario takes about 10 ms. Random pairs at the input limits (100 nodes and 300 facts, most of them false) take 0.4 to 2.2 s, longer the more roles, functions and entry principals they have. Adversarial input is slower still, because each role an entry principal reaches is then evaluated against every other role through every function: one principal able to pass 49 roles into 49 functions takes about 11 s, and with 66 roles and 33 functions about 18 s. So the target holds for the bundled scenario and for lighter pairs at the limits, but not for denser or adversarial ones.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

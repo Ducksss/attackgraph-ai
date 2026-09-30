@@ -8,7 +8,7 @@ AttackGraph AI
 
 ## Elevator pitch
 
-Pick one; each fits Devpost's 200-character limit. A review flagged "proves the fix" as an overclaim, because the product itself says "Verified in this model", so the first two say "tests the fix". The site's hero and the README intro still say "proves", so whichever you pick, use it everywhere.
+Pick one; each fits Devpost's 200-character limit. Both say "tests the fix", matching the product's "Verified in this model".
 
 185 characters:
 
@@ -17,10 +17,6 @@ Pick one; each fits Devpost's 200-character limit. A review flagged "proves the 
 180 characters:
 
 > One IAM change can hand your build pipeline admin. AttackGraph AI finds the new route, explains it with Amazon Bedrock, tests the fix and blocks the pull request on the exact line.
-
-186 characters, the original wording:
-
-> See what a cloud permission change unlocks before you deploy it: AttackGraph AI finds the new route to admin, explains it with Amazon Bedrock, proves the fix and blocks the pull request.
 
 ## Thumbnail
 
@@ -85,10 +81,10 @@ It is a defensive review prototype: it reads synthetic data only, never connects
 
 ## Accomplishments that we're proud of
 
-- A live Amazon Bedrock run on 29 September 2026: of ten calls, eight explanations passed validation and none made an unsupported access or fix claim. The reply validator rejected one reply, and AWS refused one call while the new account was being verified.
+- Two live Amazon Bedrock runs of ten calls each. On 30 September 2026, with the current prompt, all ten explanations passed validation and none made an unsupported access or fix claim. The first run, on 29 September, validated eight: the reply validator rejected one reply, and AWS refused one call while the new account was being verified.
 - Every result traces back to a line in the input files.
 - The check blocked a real pull request on GitHub, with its note on line 27: the exact line that opened the route.
-- It is fast enough to sit in review. The bundled comparison and fix simulation take about 5 ms, and a 100-node, 300-fact pair compares in about 1.5 s.
+- It is fast enough to sit in review. Measured on 30 September 2026 on the build laptop, the bundled comparison and fix simulation take about 10 ms, well inside the two-second target. At the input limits of 100 nodes and 300 facts, random pairs take 0.4 to 2.2 s, and one principal able to pass 49 roles into 49 functions takes about 11 s, so the target does not hold for every input.
 
 ## What we learned
 
@@ -130,6 +126,6 @@ Not recorded yet. A three-minute outline that follows the README's demo script:
 
 - [ ] Record the video and add its link.
 - [x] The repository is public, so judges can open the code and the demo pull request.
-- [ ] The live Bedrock evidence is for prompt `explain-v1`. Re-run it with `explain-v2` before quoting results for the current prompt.
+- [x] The live Bedrock evidence covers the current prompt, `explain-v2`: 10 of 10 validated on 30 September 2026.
 - [x] The repository is under the MIT License.
 - [ ] Confirm the "What's next" list: it proposes future work, not commitments.

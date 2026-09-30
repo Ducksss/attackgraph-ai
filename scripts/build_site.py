@@ -6,11 +6,11 @@ landing page (why the tool is needed) at / and the live demo at /demo. On the
 demo page the scenario tabs and the fix simulation switch between
 pre-computed states in the browser.
 
-The hosted page makes no AI calls and accepts no uploads, as the PRD requires
-for anonymous visitors. The flagship scenario shows a recorded live Amazon
-Nova Pro reply, labelled with its request ID, and only if its analysis ID
-still matches the freshly computed analysis. The other scenarios show the
-deterministic summary.
+The hosted page makes no AI calls and accepts no uploads, so an anonymous
+visitor cannot trigger a chargeable Bedrock call. The flagship scenario shows
+a recorded live Amazon Nova Pro reply, labelled with its request ID, and only
+if its analysis ID still matches the freshly computed analysis. The other
+scenarios show the deterministic summary.
 
 Usage:
     python scripts/build_site.py            # writes site/index.html and site/demo/index.html
@@ -362,7 +362,7 @@ HEAD = (
     '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
     "<title>{title}</title>\n"
     '<meta name="description" content="AttackGraph AI finds new routes to admin roles and sensitive data in a proposed '
-    'cloud change, explains them with Amazon Bedrock, and proves the fix.">\n'
+    'cloud change, explains them with Amazon Bedrock, and tests the fix.">\n'
     '<meta name="theme-color" content="#f9f9fa">\n'
     f'<link rel="icon" href="{FAVICON}">\n'
     '<link rel="preconnect" href="https://fonts.googleapis.com">\n'

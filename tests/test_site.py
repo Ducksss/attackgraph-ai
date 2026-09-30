@@ -23,7 +23,7 @@ def test_build_renders_the_landing_page_and_every_scenario(tmp_path):
     for key in ("passrole", "repair", "unknown", "invalid", "upload"):
         assert f'id="sc-{key}"' in demo
     assert "1 new path to a protected role" in demo and "Analysis incomplete" in demo
-    assert "Recorded AI explanation" in demo and "410472bd-679f-43a1-a1a1-783459e321b7" in demo
+    assert "Recorded AI explanation" in demo and "ebf66418-50b4-4e8f-8ee2-8675d76a6fb0" in demo
     assert "This hosted page never calls Bedrock" in demo
     # The recorded reply names each entity, on the overview quote and in the demo, instead of printing raw IDs.
     for html in (landing, demo):
@@ -56,10 +56,10 @@ def test_a_stale_recording_is_never_shown(tmp_path):
 
 def test_recorded_reply_matches_the_reviewed_evidence():
     record = json.loads(build_site.RECORDED.read_text())
-    evidence = (ROOT / "docs" / "evidence" / "ac9-bedrock-review-2026-09-29.md").read_text()
-    run8 = evidence.split("## Run 8: generated", 1)[1].split("## Run 9", 1)[0]
-    assert record["request_id"] in run8 and record["summary"] in run8 and record["limitations"] in run8
-    assert "[x] no unsupported claims" in run8
+    evidence = (ROOT / "docs" / "evidence" / "ac9-bedrock-review-2026-09-30.md").read_text()
+    run5 = evidence.split("## Run 5: generated", 1)[1].split("## Run 6", 1)[0]
+    assert record["request_id"] in run5 and record["summary"] in run5 and record["limitations"] in run5
+    assert "[x] no unsupported claims" in run5
 
 
 def test_committed_site_is_current(tmp_path):
