@@ -39,9 +39,11 @@ _ALIAS_TOKEN = re.compile(r"\b([APRLOFDXE])(\d{1,3})\b")
 # untouched as "without affecting ...". The claim runs to the next punctuation mark.
 _UNAFFECTED_CLAIM = re.compile(r"\bwithout\s+affecting\b[^,;:.!?\n]*", re.IGNORECASE)
 _CHECK_ALIAS = re.compile(r"\bE\d{1,3}\b")
-_CHECK_TERM = re.compile(r"\bexpected[- ]access", re.IGNORECASE)
-# Words that add another object after the last check a claim names: "E1 and E2 or any other access".
+_CHECK_TERM = re.compile(r"\bexpected[- ]access(?:es)?\b", re.IGNORECASE)
+# Words that add another object after the last check a claim names: "E1 and E2 or any other access"...
 _WIDENING = re.compile(r"\b(?:access|accesses|anything|everything|else|other|relationships|permissions)\b", re.IGNORECASE)
+# ...unless the words only name the checks themselves: "E1 and E2 access checks".
+_CHECKS_ONLY = re.compile(r"(?:(?:expected-access|expected|access)\s+)*checks?", re.IGNORECASE)
 _NODE_PREFIX = {"principal": "P", "role": "R", "lambda": "L", "s3_object": "O"}
 _DERIVED_TITLES = {
     "same_account": "same-account check",
@@ -352,27 +354,28 @@ def _check_fix_scope(summary: str, evidence: list) -> None:
     relationships" claims that the rest of the model is unaffected, which
     nothing checked.
 
-    A claim that names checks must also end with them. After its last alias,
-    any of the words access, accesses, anything, everything, else, other,
-    relationships or permissions adds an object that no check covers, as in
-    "E1 and E2 or any other access". The claim stops at the punctuation mark,
-    so "E1 and E2, or any other access" is not caught here; the prompt rule
-    covers it.
+    The claim must also end with the checks it names. After its last alias,
+    or after its last "expected access(es)" when it names no alias, any of the
+    words access, accesses, anything, everything, else, other, relationships
+    or permissions adds an object that no check covers, as in "E1 and E2 or
+    any other access" or "expected accesses or anything else". Words that only
+    name the checks themselves, such as "E1 and E2 access checks", are
+    allowed. The claim stops at the punctuation mark, so "E1 and E2, or any
+    other access" is not caught here; the prompt rule covers it.
     """
     cites_check = any(_CHECK_ALIAS.fullmatch(e) for e in evidence)
     for match in _UNAFFECTED_CLAIM.finditer(summary):
         claim = " ".join(match.group(0).split())
         aliases = list(_CHECK_ALIAS.finditer(claim))
-        if aliases:
-            tail = claim[aliases[-1].end() :].strip()
-            if _WIDENING.search(tail):
-                raise ResponseError(
-                    f'summary claims more than the engine checked: "{_quote(claim)}" adds "{_quote(tail)}" to the checks it names'
-                )
-            continue
-        if not _CHECK_TERM.search(claim):
+        scope = aliases or list(_CHECK_TERM.finditer(claim))
+        if not scope:
             raise ResponseError(f'summary claims more than the engine checked: "{_quote(claim)}" names no expected-access check')
-        if not cites_check:
+        tail = claim[scope[-1].end() :].strip()
+        if _WIDENING.search(tail) and not _CHECKS_ONLY.fullmatch(tail):
+            raise ResponseError(
+                f'summary claims more than the engine checked: "{_quote(claim)}" adds "{_quote(tail)}" to the checks it names'
+            )
+        if not aliases and not cites_check:
             raise ResponseError(f'summary claims "{_quote(claim)}" but evidence_ids cite no expected-access check')
 
 

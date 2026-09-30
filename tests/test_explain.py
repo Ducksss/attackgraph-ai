@@ -279,8 +279,11 @@ def test_fix_scope_rule_matches_the_30_september_review(demo, run):
         ("without affecting other access relationships (E1, E2).", ["F1"]),  # the 29 September wording
         ("without affecting other access relationships (E1 and E2).", ["F1"]),  # a bracket after the last check is not a widening
         ("without affecting E1 and E2 as verified in the model.", ["F1"]),  # nor are words that add no object
+        ("without affecting the E1 and E2 access checks.", ["F1"]),  # words that only name the checks themselves
+        ("without affecting E1 and E2 expected-access checks.", ["F1"]),
         ("and keeps checks E1 and E2 passing.", ["F1"]),  # the wording the prompt asks for
         ("without affecting the expected-access checks.", ["F1", "E1", "E2"]),
+        ("without affecting the expected accesses.", ["F1", "E1"]),
     ],
     ids=[
         "aliases",
@@ -288,8 +291,11 @@ def test_fix_scope_rule_matches_the_30_september_review(demo, run):
         "aliases-in-brackets",
         "bracket-after-aliases",
         "plain-words-after-aliases",
+        "aliases-then-access-checks",
+        "aliases-then-expected-access-checks",
         "prompt-wording",
         "cited-checks",
+        "cited-expected-accesses",
     ],
 )
 def test_claims_scoped_to_the_expected_access_checks_are_accepted(demo, tail, evidence):
@@ -329,8 +335,35 @@ def test_claims_scoped_to_the_expected_access_checks_are_accepted(demo, tail, ev
             'summary claims more than the engine checked: "without affecting E1 and E2 or anything else" '
             'adds "or anything else" to the checks it names',
         ),
+        (
+            "without affecting E1 and E2 access or other permissions.",
+            ["F1", "E1", "E2"],
+            'summary claims more than the engine checked: "without affecting E1 and E2 access or other permissions" '
+            'adds "access or other permissions" to the checks it names',
+        ),
+        (
+            "without affecting E1 and E2 access checks and other permissions.",  # naming the checks, then more
+            ["F1", "E1", "E2"],
+            'summary claims more than the engine checked: "without affecting E1 and E2 access checks and other permissions" '
+            'adds "access checks and other permissions" to the checks it names',
+        ),
+        (
+            "without affecting other expected accesses or anything else.",  # no alias: the tail after the last term
+            ["F1", "E1", "E2"],
+            'summary claims more than the engine checked: "without affecting other expected accesses or anything else" '
+            'adds "or anything else" to the checks it names',
+        ),
     ],
-    ids=["wider-claim-then-checks", "uncited-checks", "widened-to-other-access", "widened-to-relationships", "widened-to-anything-else"],
+    ids=[
+        "wider-claim-then-checks",
+        "uncited-checks",
+        "widened-to-other-access",
+        "widened-to-relationships",
+        "widened-to-anything-else",
+        "widened-after-access",
+        "widened-after-access-checks",
+        "term-widened-to-anything-else",
+    ],
 )
 def test_unscoped_claims_are_rejected_with_the_reason(demo, tail, evidence, reason):
     _, _, packet = demo
