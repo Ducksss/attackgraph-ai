@@ -31,6 +31,7 @@ sys.path.insert(0, str(ROOT))
 from attackgraph import ENGINE_VERSION, MODEL_VERSION, landing, page, web  # noqa: E402
 from attackgraph.analysis import Finding  # noqa: E402
 from attackgraph.explain import DEFAULT_MODEL_ID, build_packet, stored_segments  # noqa: E402
+from attackgraph.pullrequest import PullRequest, demo_pull_request  # noqa: E402
 from attackgraph.render import step_text  # noqa: E402
 from attackgraph.report import build_report  # noqa: E402
 from attackgraph.scenarios import SCENARIO_LABELS, SCENARIOS, UPLOAD, run_scenario  # noqa: E402
@@ -288,13 +289,27 @@ def evidence(result, delta, key: str) -> str:
     )
 
 
-def scenario_panel(key: str, result, recorded: dict | None) -> str:
+def pull_request_card(pr: PullRequest) -> str:
+    """The pull request before and after the fix commit; the fix buttons switch the whole scenario."""
+    if pr.fix is None:
+        return f'<div class="ag-scard">{page.pull_request(pr)}</div>'
+    apply = f'<button type="button" class="ag-btn ag-btn-primary" data-action="simulate">{web.icon("healing")}Apply the suggested fix</button>'
+    undo = '<button type="button" class="ag-btn ag-btn-ghost" data-action="reset">Undo the fix</button>'
+    return (
+        '<div class="ag-scard">'
+        f'<div class="ag-sim-off">{page.pull_request(pr)}<div class="ag-actions">{apply}</div></div>'
+        f'<div class="ag-sim-on">{page.pull_request(pr, fixed=True)}<div class="ag-actions">{undo}</div></div>'
+        "</div>"
+    )
+
+
+def scenario_panel(key: str, result, recorded: dict | None, pr: PullRequest | None = None) -> str:
     if not result.ok:
         body = page.invalid(result)
     else:
         comparison = result.comparison
         delta = comparison.deltas[0] if comparison.deltas else None
-        body = page.verdict(result)
+        body = (pull_request_card(pr) + page.inside_check() if pr is not None else "") + page.verdict(result)
         if delta is None:
             body += page.stats(result) + evidence(result, None, key)
         else:
@@ -375,7 +390,9 @@ def build(out: Path, recorded_path: Path = RECORDED) -> Path:
         f'aria-selected="{"true" if key == "passrole" else "false"}" tabindex="{0 if key == "passrole" else -1}">{esc(label)}</button>'
         for key, label in SCENARIO_LABELS.items()
     )
-    panels = "".join(scenario_panel(key, results[key], recorded) for key in SCENARIOS) + upload_panel()
+    pr = demo_pull_request(results["passrole"])
+    panels = "".join(scenario_panel(key, results[key], recorded, pr if key == "passrole" else None) for key in SCENARIOS)
+    panels += upload_panel()
     built = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     note = (
         f'<p class="ag-hosted-note">Static build of the bundled scenarios, generated {built} (UTC) by engine '

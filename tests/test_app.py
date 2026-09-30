@@ -115,6 +115,19 @@ def test_simulated_fix_closes_the_path_and_reset_restores_it(app):
     assert ">Revoked</span>" not in html(app)
 
 
+def test_the_pull_request_check_fails_until_the_fix_is_applied(app):
+    page = html(app)
+    assert page.index("The pull request") < page.index("1 new path to a protected role")
+    assert "Check failed" in page and "New path to a protected role" in page and "exit status 1" in page
+    click(app, "Apply the suggested fix")
+    page = html(app)
+    assert "Check passed" in page and "exit status 0" in page and ">Revoked</span>" in page  # the whole page follows
+    click(app, "Undo the fix")
+    assert "Check failed" in html(app) and ">Revoked</span>" not in html(app)
+    app.segmented_control(key="scenario").set_value("repair").run()
+    assert "The pull request" not in html(app)
+
+
 def test_start_over_clears_simulations_and_returns_to_the_flagship_demo(app):
     click(app, "Simulate the fix")
     assert ">Revoked</span>" in html(app)

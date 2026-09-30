@@ -10,7 +10,7 @@ import json
 
 import streamlit as st
 
-from attackgraph import ENGINE_VERSION, MODEL_VERSION, landing, page, web
+from attackgraph import ENGINE_VERSION, MODEL_VERSION, landing, page, pullrequest, web
 from attackgraph.analysis import RULE_TITLES, Finding
 from attackgraph.explain import (
     PROMPT_VERSION,
@@ -93,6 +93,34 @@ def start_simulation(analysis_id: str, fix_id: str) -> None:
 
 def stop_simulation() -> None:
     st.session_state.simulation = None
+
+
+@st.cache_resource(show_spinner="Running the pull-request check...")
+def demo_pull_request() -> pullrequest.PullRequest | None:
+    return pullrequest.demo_pull_request(run_scenario("passrole"))
+
+
+def pull_request_card(result: PipelineResult, sim) -> None:
+    """The flagship change as a pull request, with the repository's check run on it before and after the fix."""
+    pr = demo_pull_request()
+    if pr is None:
+        return
+    fixed = sim is not None and pr.fix is not None and sim.fact_id == pr.fix.fact_id
+    fix = next((f for f in result.fixes if pr.fix is not None and f.fact_id == pr.fix.fact_id), None)
+    with st.container(key="agcard-pr"):
+        st.html(page.pull_request(pr, fixed))
+        if fixed:
+            st.button("Undo the fix", on_click=stop_simulation, key="pr-undo")
+        elif fix is not None:
+            st.button(
+                "Apply the suggested fix",
+                type="primary",
+                icon=":material/healing:",
+                on_click=start_simulation,
+                args=(result.comparison.analysis_id, fix.id),
+                key="pr-apply",
+            )
+    st.html(page.inside_check())
 
 
 def upload_panel() -> None:
@@ -384,6 +412,8 @@ def demo_section() -> None:
         st.html(page.invalid(result))
         return
     sim = active_simulation(result)
+    if st.session_state.loaded == ("scenario", "passrole"):
+        pull_request_card(result, sim)
     st.html(page.verdict(result) + page.stats(result, sim))
     comparison = result.comparison
     delta = choose_finding(comparison)

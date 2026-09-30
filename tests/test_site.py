@@ -29,6 +29,17 @@ def test_build_renders_the_landing_page_and_every_scenario(tmp_path):
     for html in (landing, demo):
         assert '<span class="ag-ent" title="p-ci-deployer">' in html and "allows p-ci-deployer" not in html
     assert "The route after the fix" in demo
+    # The flagship opens with the pull request: the failing check, and the passing one after the fix commit.
+    flagship = demo.split('id="sc-passrole"', 1)[1].split('id="sc-repair"', 1)[0]
+    assert flagship.index("The pull request") < flagship.index("Inside the check") < flagship.index("1 new path to a protected role")
+    assert "Check failed" in flagship and "Check passed" in flagship and "Apply the suggested fix" in flagship
+    assert "The pull request" not in demo.split('id="sc-repair"', 1)[1]
+    assert "Can it block a pull request?" in landing and "CI blocking" not in landing
+    for html in (landing, demo):
+        assert "\u2014" not in html and "<script>alert" not in html
+    assert sorted(p.name for p in (tmp_path / "site" / "reports").glob("*.md")) == ["passrole.md", "repair.md", "unknown.md"]
+    headers = json.loads((tmp_path / "site" / "vercel.json").read_text())["headers"][0]["headers"]
+    assert {"key": "X-Frame-Options", "value": "DENY"} in headers
 
 
 def test_a_stale_recording_is_never_shown(tmp_path):

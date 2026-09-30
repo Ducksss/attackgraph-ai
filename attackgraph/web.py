@@ -7,7 +7,9 @@ and messages come from uploaded files.
 
 from __future__ import annotations
 
+import difflib
 import html
+import re
 
 from .story import KIND_NAMES, Condition, PathNode, Story
 
@@ -226,6 +228,48 @@ CSS = """
 .ag-ent.protected .ag-icon { color: var(--ag-amber-text); }
 .ag-badges { display: flex; flex-wrap: wrap; gap: 6px; }
 .ag-fix-result { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--ag-line-2); }
+
+.ag-inside { margin: 36px 0 4px; }
+.ag-inside .ag-note { margin-top: 8px; }
+.ag-pr { border: 1px solid var(--ag-line); border-radius: 12px; overflow: hidden; margin-top: 14px; background: var(--ag-surface); }
+.ag-pr-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; padding: 12px 16px;
+  background: var(--ag-surface-2); border-bottom: 1px solid var(--ag-line); }
+.ag-pr-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: var(--ag-text); }
+.ag-pr-title .ag-icon { color: var(--ag-accent); font-size: 20px; }
+.ag-pr-meta { color: var(--ag-muted); font-size: 13px; }
+.ag-diff-file { padding: 8px 16px; font-family: var(--ag-mono); font-size: 12.5px; color: var(--ag-body); border-bottom: 1px solid var(--ag-line-2); }
+.ag-diff { font-family: var(--ag-mono); font-size: 12.5px; line-height: 1.6; padding: 4px 0; }
+.ag-dl { display: grid; grid-template-columns: 48px 20px minmax(0, 1fr); color: var(--ag-body); }
+.ag-dl .n { text-align: right; padding-right: 10px; color: var(--ag-soft); user-select: none; }
+.ag-dl .s { color: var(--ag-soft); user-select: none; }
+.ag-dl code { font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 16px 0 0; background: none; color: inherit; }
+.ag-dl.del { background: #fff5f5; }
+.ag-dl.del .s { color: var(--ag-red); }
+.ag-dl.add { background: #f0fdf4; }
+.ag-dl.add .s { color: var(--ag-green); }
+.ag-dl mark { color: inherit; border-radius: 3px; padding: 0 1px; }
+.ag-dl.del mark { background: #fecaca; }
+.ag-dl.add mark { background: #bbf7d0; }
+.ag-annot { margin: 6px 16px 10px 68px; padding: 10px 14px; border: 1px solid var(--ag-red-line); border-left: 4px solid var(--ag-red);
+  border-radius: 8px; background: var(--ag-surface); font-family: "Inter", system-ui, -apple-system, sans-serif; }
+.ag-annot-title { display: flex; align-items: flex-start; gap: 6px; font-weight: 600; font-size: 14px; line-height: 1.45; color: var(--ag-red-text); }
+.ag-annot-title .ag-icon { font-size: 18px; flex: none; margin-top: 1px; }
+.ag-annot-src { font-weight: 400; color: var(--ag-soft); font-size: 12.5px; margin-left: 4px; }
+.ag-annot p { margin: 4px 0 0; color: var(--ag-body); font-size: 14px; line-height: 1.55; }
+.ag-annot.notice { border-color: var(--ag-accent-line); border-left-color: var(--ag-accent); }
+.ag-annot.notice .ag-annot-title { color: var(--ag-accent-strong); }
+.ag-annot.warning { border-color: var(--ag-amber-line); border-left-color: var(--ag-amber); }
+.ag-annot.warning .ag-annot-title { color: var(--ag-amber-text); }
+.ag-pr-check { display: flex; gap: 10px; align-items: flex-start; padding: 12px 16px; border-top: 1px solid var(--ag-line); background: var(--ag-surface-2); }
+.ag-pr-check > .ag-icon { font-size: 22px; margin-top: 1px; }
+.ag-pr-check.fail > .ag-icon { color: var(--ag-red); }
+.ag-pr-check.pass > .ag-icon { color: var(--ag-green); }
+.ag-pr-check .ag-note { margin: 2px 0 0; }
+.ag-log { margin-top: 6px; }
+.ag-log summary { cursor: pointer; color: var(--ag-accent-strong); font-size: 13.5px; width: fit-content; }
+.ag-log summary:focus-visible { outline: 2px solid var(--ag-accent); outline-offset: 2px; }
+.ag-log pre { margin: 8px 0 0; padding: 10px 12px; border: 1px solid var(--ag-line); border-radius: 8px; background: var(--ag-surface);
+  font-family: var(--ag-mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ag-body); }
 .ag-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; margin-top: 14px; }
 .ag-split.lead { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
 .ag-split > :only-child { grid-column: 1 / -1; }
@@ -279,6 +323,9 @@ CSS = """
   .ag-split, .ag-split.lead, .ag-conds.two { grid-template-columns: minmax(0, 1fr); gap: 16px; }
 }
 @media (max-width: 640px) {
+  .ag-dl { grid-template-columns: 34px 14px minmax(0, 1fr); }
+  .ag-dl .n { padding-right: 6px; }
+  .ag-annot { margin-left: 12px; margin-right: 12px; }
   .ag-nav { padding: 8px 8px 8px 12px; }
   .ag-brand { font-size: 15px; }
   .ag-nav .ag-btn { padding: 8px 12px; font-size: 14px; }
@@ -427,6 +474,59 @@ def reply(segments: Segments, nodes: tuple[PathNode, ...]) -> str:
     return "".join(out)
 
 
+_TOKENS = re.compile(r"\w+|\s+|[^\w\s]")
+
+
+def _marked(text: str, other: str) -> str:
+    """text with the words that differ from other marked, so a flipped value stands out in its line."""
+    mine, theirs = _TOKENS.findall(text), _TOKENS.findall(other)
+    out = []
+    for tag, i1, i2, _, _ in difflib.SequenceMatcher(None, mine, theirs, autojunk=False).get_opcodes():
+        part = esc("".join(mine[i1:i2]))
+        out.append(part if tag == "equal" or not part else f"<mark>{part}</mark>")
+    return "".join(out)
+
+
+def diff(before: str, after: str, notes: dict[int, str] | None = None, context: int = 1) -> str:
+    """A unified diff of two texts, numbered by line, with changed words marked.
+
+    notes maps a line number in the new text to HTML placed right under that
+    line, the way a code review shows a check's annotation.
+    """
+    notes = notes or {}
+    old, new = before.splitlines(), after.splitlines()
+
+    def row(kind: str, number: int, sign: str, code: str) -> str:
+        line = f'<div class="ag-dl {kind}"><span class="n">{number}</span><span class="s">{sign}</span><code>{code}</code></div>'
+        return line + (notes.get(number, "") if kind != "del" else "")
+
+    rows = []
+    for group in difflib.SequenceMatcher(None, old, new, autojunk=False).get_grouped_opcodes(context):
+        for tag, i1, i2, j1, j2 in group:
+            if tag == "equal":
+                rows += [row("ctx", j1 + k + 1, " ", esc(new[j1 + k])) for k in range(j2 - j1)]
+                continue
+            paired = tag == "replace" and i2 - i1 == j2 - j1
+            rows += [
+                row("del", i1 + k + 1, "-", _marked(old[i1 + k], new[j1 + k]) if paired else esc(old[i1 + k]))
+                for k in range(i2 - i1)
+            ]
+            rows += [
+                row("add", j1 + k + 1, "+", _marked(new[j1 + k], old[i1 + k]) if paired else esc(new[j1 + k]))
+                for k in range(j2 - j1)
+            ]
+    return '<div class="ag-diff">' + "".join(rows) + "</div>"
+
+
+def annotation(level: str, title: str, message: str, source: str) -> str:
+    """A check's note on a line, as a code review shows it."""
+    glyph = {"error": "cancel", "warning": "warning"}.get(level, "info")
+    return (
+        f'<div class="ag-annot {esc(level)}" role="note"><div class="ag-annot-title">{icon(glyph)}<span>{esc(title)}'
+        f'<span class="ag-annot-src">{esc(source)}</span></span></div><p>{esc(message)}</p></div>'
+    )
+
+
 def condition_item(condition: Condition) -> str:
     classes = ["ag-cond", condition.state] + (["changed"] if condition.change else [])
     meta = []
@@ -566,8 +666,14 @@ FAQ = (
         "the result as incomplete instead of guessing.",
     ),
     (
+        "Can it block a pull request?",
+        "Yes. The same engine runs as a command-line check that exits with an error when a change opens a new path or "
+        "leaves the result incomplete. The repository's GitHub Actions workflow runs it on every pull request and marks "
+        "the line responsible. The live demo shows it on the flagship change.",
+    ),
+    (
         "What is out of scope?",
-        "Terraform and raw IAM policy parsing, EC2, general AssumeRole chains, multi-account analysis, CI blocking and "
-        "automatic remediation. The model covers two rules: direct S3 reads and role use through a Lambda function.",
+        "Terraform and raw IAM policy parsing, EC2, general AssumeRole chains, multi-account analysis and automatic "
+        "remediation. The model covers two rules: direct S3 reads and role use through a Lambda function.",
     ),
 )

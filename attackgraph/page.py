@@ -10,6 +10,7 @@ from . import web
 from .analysis import PotentialFinding
 from .compare import Comparison, FindingDelta
 from .pipeline import PipelineResult
+from .pullrequest import COMMAND, WATCHED, CheckRun, PullRequest, changed_lines
 from .simulate import FixCandidate, best_fix_for
 from .story import Story, build_story, expected_text, involves_pass_role, is_potential
 from .web import Segments
@@ -320,3 +321,55 @@ def fix_result(comparison: Comparison, story: Story, sim: FixCandidate) -> str:
         else '<p class="ag-note"><span class="ag-badge amber">Not verified</span> The finding remains, or coverage became '
         "incomplete after the change.</p>"
     ) + "</div>"
+
+
+def _check_row(pr: PullRequest, run: CheckRun) -> str:
+    log = "\n".join([f"$ {' '.join(COMMAND)}", *run.log, f"(exit status {run.status})"])
+    glyph, tone = ("check_circle", "pass") if run.passed else ("cancel", "fail")
+    return (
+        f'<div class="ag-pr-check {tone}">{web.icon(glyph)}<div>'
+        f'<div><strong>{web.esc(pr.check_name)}</strong> <span class="ag-small">exit status {run.status}</span></div>'
+        f'<p class="ag-note">{web.esc(run.result.removeprefix("Result: ") or "No result line in the log.")}</p>'
+        f'<details class="ag-log"><summary>Show the check&#x27;s log</summary><pre>{web.esc(log)}</pre></details>'
+        "</div></div>"
+    )
+
+
+def inside_check() -> str:
+    """Separates the pull request from the analysis below it, which is of the change as submitted."""
+    return (
+        f'<div class="ag-inside"><span class="ag-tag">{web.icon("manage_search")}Inside the check</span>'
+        '<p class="ag-note">The engine&#x27;s analysis of the change as submitted: the route it opens, the condition '
+        "that flipped and the fix it verified.</p></div>"
+    )
+
+
+def pull_request(pr: PullRequest, fixed: bool = False) -> str:
+    """The flagship change as a reviewer meets it: the diff, the check's note on the line, and the check's result.
+
+    Everything shown comes from the real check run in pullrequest.py; fixed
+    shows the fix commit and the check run after it.
+    """
+    after_fix = fixed and pr.fixed is not None and pr.fixed_check is not None
+    run = pr.fixed_check if after_fix else pr.check
+    before, after = (pr.head, pr.fixed) if after_fix else (pr.base, pr.head)
+    lines = changed_lines(before, after)
+    meta = f"{plural(lines, 'line')} changed in {WATCHED}"
+    if after_fix:
+        meta = f"Fix commit: revoke {pr.fix.fact_id}, the verified fix. {meta}"
+    notes = {a.line: web.annotation(a.level, a.title, a.message, pr.check_name) for a in run.annotations if a.line}
+    loose = "".join(web.annotation(a.level, a.title, a.message, pr.check_name) for a in run.annotations if not a.line)
+    badge = '<span class="ag-badge green">Check passed</span>' if run.passed else '<span class="ag-badge red">Check failed</span>'
+    return (
+        web.card_head("merge", "The pull request", badge)
+        + f'<p class="ag-note">The same one-line change as a pull request on {web.esc(WATCHED)}, checked by the command the '
+        "repository's workflow runs on every pull request. The note on the changed line and the log are that command's "
+        "real output.</p>"
+        + '<div class="ag-pr">'
+        + f'<div class="ag-pr-head"><div class="ag-pr-title">{web.icon("merge")}{web.esc(pr.title)}</div>'
+        f'<div class="ag-pr-meta">{web.esc(meta)}</div></div>'
+        + f'<div class="ag-diff-file">{web.esc(WATCHED)}</div>{loose}'
+        + web.diff(before, after, notes)
+        + _check_row(pr, run)
+        + "</div>"
+    )
