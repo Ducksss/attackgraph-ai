@@ -24,8 +24,10 @@ class PipelineResult:
 
 def run(baseline: bytes, baseline_name: str, proposal: bytes, proposal_name: str) -> PipelineResult:
     """Neither file is analysed unless both validate."""
-    b = load_snapshot(baseline, baseline_name)
-    p = load_snapshot(proposal, proposal_name)
+    return run_loaded(load_snapshot(baseline, baseline_name), load_snapshot(proposal, proposal_name))
+
+
+def run_loaded(b: LoadResult, p: LoadResult) -> PipelineResult:
     if not (b.ok and p.ok):
         return PipelineResult(b, p, None, ())
     comparison = compare_snapshots(b.snapshot, p.snapshot)

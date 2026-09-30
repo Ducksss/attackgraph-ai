@@ -1,0 +1,67 @@
+# AttackGraph AI as a pull-request check.
+#
+# Each snapshot a pull request adds or changes under snapshots/ is compared
+# with its version on the base branch. The check fails when the change opens a
+# new path to a protected role or object, leaves the result incomplete, or
+# makes the file invalid, and it marks the responsible lines on the pull
+# request. A snapshot with no base version is compared with an empty baseline,
+# so every path in it counts as new. The full report goes to the job summary.
+#
+# Static and offline: synthetic JSON only, no AWS credentials, and Amazon
+# Bedrock is never called. It runs on every pull request, including ones that
+# change no snapshot, so it can be made a required check.
+name: Permission check
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  attackgraph:
+    name: AttackGraph AI
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The merge commit GitHub builds for the pull request, and its first
+          # parent (HEAD^1): the base branch it would merge into.
+          fetch-depth: 2
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Compare changed snapshots with the base branch
+        run: |
+          # Listed before the loop so that a git failure stops the step instead of checking nothing.
+          git diff -z --name-only --no-renames --diff-filter=AM HEAD^1 HEAD -- 'snapshots/*.json' > "$RUNNER_TEMP/changed"
+          report="$RUNNER_TEMP/report.md"
+          failed=0
+          checked=0
+          while IFS= read -r -d '' file; do
+            checked=$((checked + 1))
+            rm -f "$report"
+            if git cat-file -e "HEAD^1:$file" 2>/dev/null; then
+              base="$RUNNER_TEMP/base-branch/$file"
+              mkdir -p "$(dirname "$base")"
+              git show "HEAD^1:$file" > "$base"
+              python -m attackgraph --github --report "$report" -- "$base" "$file" || failed=1
+            else
+              python -m attackgraph --github --report "$report" -- "$file" || failed=1
+            fi
+            if [ -f "$report" ]; then
+              cat "$report" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            echo
+          done < "$RUNNER_TEMP/changed"
+          if [ "$checked" -eq 0 ]; then
+            echo "No snapshot under snapshots/ was added or changed." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$failed"
