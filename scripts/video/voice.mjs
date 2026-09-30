@@ -34,6 +34,8 @@ function run(cmd, argv) {
 
 function seconds(file) {
   const r = spawnSync(FFPROBE, ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file], { encoding: "utf8" });
+  // A failed probe would otherwise read as 0 s and be reported as "silent after trimming".
+  if (r.status !== 0) throw new Error(`${FFPROBE} failed on ${file} (${r.status ?? r.error?.message})`);
   return Number(r.stdout.trim());
 }
 
