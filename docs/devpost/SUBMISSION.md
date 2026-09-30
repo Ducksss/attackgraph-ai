@@ -88,7 +88,7 @@ It is a defensive review prototype: it reads synthetic data only, never connects
 
 ## What we learned
 
-- Constraining the model works. Giving it aliases instead of names, and checking every identifier it cites, kept its accepted explanations free of unsupported claims.
+- Constraining the model works, within limits. Giving it aliases instead of names, and checking every identifier it cites, kept its accepted explanations free of unsupported access or fix claims. Identifier checks can't catch everything, though: four of the latest ten replies still overstated what the fix leaves untouched, so every claim still gets a review against the evidence.
 - Permission risk is about combinations. Modelling "every condition must hold" is what makes the one changed condition stand out.
 - Saying "unknown" out loud is a feature, not a weakness.
 
@@ -113,18 +113,19 @@ It is a defensive review prototype: it reads synthetic data only, never connects
 
 ## Video demo
 
-Not recorded yet. A three-minute outline that follows the README's demo script:
+2 minutes 28 seconds, 1080p, with captions burned in and no voice. Upload `attackgraph-ai-demo.mp4` to YouTube as Unlisted, and paste its link into Devpost's video field.
 
-1. **0:00** The problem: the overview's hero diagram. One pull request widens `iam:PassRole` and completes a route to the admin role.
-2. **0:30** The live demo opens on the pull request: line 27 flips, the check fails and leaves its note on that line.
-3. **1:05** Inside the check: the path it opens, the fact that flipped, and the 7 conditions.
-4. **1:45** Amazon Bedrock: the Nova Pro explanation, and why it can't change the result.
-5. **2:20** The fix: revoke one grant, high-risk paths 1 to 0, normal access 2 of 2, then the fix commit passes the check.
-6. **2:45** Trust and limits: synthetic data only, and nothing is deployed.
+1. **0:04** The pull request on GitHub: line 27 flips `false` to `true`, and the AttackGraph AI check fails with its note on that line.
+2. **0:31** The overview's hero: that one change completes all 7 conditions of a route to the admin role.
+3. **0:41** The live demo opens on the same pull request. Apply the suggested fix, and the check passes.
+4. **0:59** Inside the check: high-risk paths go from 0 to 1, with the route, the changed fact and all 7 conditions.
+5. **1:26** A live call to Amazon Nova Pro on Amazon Bedrock, shown with its request ID, and what the model sees: placeholder IDs, never names.
+6. **1:50** The fix, tested in the model: high-risk paths 1 to 0, normal access 2 of 2, "Verified in this model".
+7. **2:07** Trust and limits: synthetic data only, two explicit rules, and an unknown is never reported as safe.
 
 ## Before you submit
 
-- [ ] Record the video and add its link.
+- [ ] Upload the video to YouTube as Unlisted, open its link in a signed-out browser, and paste it into the Video demo field.
 - [x] The repository is public, so judges can open the code and the demo pull request.
 - [x] The live Bedrock evidence covers the current prompt, `explain-v2`: 10 of 10 validated on 30 September 2026.
 - [x] The repository is under the MIT License.
