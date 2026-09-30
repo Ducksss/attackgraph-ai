@@ -1,36 +1,170 @@
-# AttackGraph AI
+<a id="readme-top"></a>
 
-**See what a cloud permission change unlocks, before you deploy it.**
+<!-- PROJECT SHIELDS -->
+[![Live demo][demo-shield]][demo-url]
+[![Amazon Bedrock: Nova Pro][bedrock-shield]][bedrock-url]
+[![Python 3.11+][python-shield]][python-url]
+[![Pull-request check: GitHub Actions][check-shield]][check-url]
+[![Synthetic data only][synthetic-shield]][synthetic-url]
 
-Try it at **[attackgraph-ai.vercel.app](https://attackgraph-ai.vercel.app)**: the overview explains the problem, and the [live demo](https://attackgraph-ai.vercel.app/demo) runs the real engine on bundled synthetic scenarios. No sign-up, no uploads, no AI calls on the hosted pages.
 
-![AttackGraph AI overview: a pull request widens iam:PassRole, completes all 7 conditions of a route to the admin role, and the engine reports the new path and a verified fix](docs/images/hero.png)
+
+<!-- PROJECT LOGO -->
+<br />
+<div align="center">
+  <a href="https://attackgraph-ai.vercel.app">
+    <img src="docs/brand/mark.svg" alt="AttackGraph AI logo" width="80" height="80">
+  </a>
+
+  <h3 align="center">AttackGraph AI</h3>
+
+  <p align="center">
+    See what a cloud permission change unlocks, before you deploy it.
+    <br />
+    <a href="#how-it-works"><strong>Explore the docs »</strong></a>
+    <br />
+    <br />
+    <a href="https://attackgraph-ai.vercel.app/demo">View Demo</a>
+    &middot;
+    <a href="https://github.com/Ducksss/attackgraph-ai/issues/new?labels=bug">Report Bug</a>
+    &middot;
+    <a href="https://github.com/Ducksss/attackgraph-ai/issues/new?labels=enhancement">Request Feature</a>
+  </p>
+</div>
+
+
+
+<!-- TABLE OF CONTENTS -->
+<details>
+  <summary>Table of Contents</summary>
+  <ol>
+    <li>
+      <a href="#about-the-project">About The Project</a>
+      <ul>
+        <li><a href="#the-demo-in-four-pictures">The demo in four pictures</a></li>
+        <li><a href="#built-with">Built With</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#getting-started">Getting Started</a>
+      <ul>
+        <li><a href="#prerequisites">Prerequisites</a></li>
+        <li><a href="#installation">Installation</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#usage">Usage</a>
+      <ul>
+        <li><a href="#run-the-app">Run the app</a></li>
+        <li><a href="#run-it-as-a-pull-request-check">Run it as a pull-request check</a></li>
+        <li><a href="#amazon-bedrock">Amazon Bedrock</a></li>
+        <li><a href="#demo-script">Demo script</a></li>
+        <li><a href="#hosting">Hosting</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#how-it-works">How it works</a>
+      <ul>
+        <li><a href="#snapshot-format">Snapshot format</a></li>
+        <li><a href="#rules">Rules</a></li>
+        <li><a href="#coverage-and-comparison">Coverage and comparison</a></li>
+        <li><a href="#fix-simulation">Fix simulation</a></li>
+        <li><a href="#ai-explanation-boundaries">AI explanation boundaries</a></li>
+      </ul>
+    </li>
+    <li><a href="#roadmap">Roadmap</a></li>
+    <li><a href="#acceptance-criteria">Acceptance criteria</a></li>
+    <li><a href="#limitations">Limitations</a></li>
+    <li><a href="#project-layout">Project layout</a></li>
+    <li><a href="#contributing">Contributing</a></li>
+    <li><a href="#licence">Licence</a></li>
+    <li><a href="#contact">Contact</a></li>
+    <li><a href="#acknowledgements">Acknowledgements</a></li>
+  </ol>
+</details>
+
+
+
+<!-- ABOUT THE PROJECT -->
+## About The Project
+
+[![AttackGraph AI overview: a pull request widens iam:PassRole, completes all 7 conditions of a route to the admin role, and the engine reports the new path and a verified fix][product-screenshot]](https://attackgraph-ai.vercel.app)
 
 A pull request that widens one IAM permission can quietly let a build pipeline run code as an administrator. Code review sees the changed line. AttackGraph AI compares the current and proposed configuration, draws the exact route that line opens, explains it in plain English with Amazon Bedrock, and proves which single revocation closes it.
 
 It is a static, defensive review prototype built for the AWS Build Beyond Student AI Demo Challenge 2026. It reads synthetic JSON snapshots, never connects to the accounts they describe, and never deploys or executes anything. Its only AWS call is the Bedrock request for explanation text.
 
-## The demo in three pictures
+Try it at **[attackgraph-ai.vercel.app](https://attackgraph-ai.vercel.app)**: the overview explains the problem, and the [live demo](https://attackgraph-ai.vercel.app/demo) runs the real engine on bundled synthetic scenarios. No sign-up, no uploads, no AI calls on the hosted pages.
 
-**1. One changed permission opens a route to the admin role.** The proposal lets the CI deploy user pass the deployment admin role to Lambda. The CI user can already create, invoke and control a Lambda function, so it can now run code as the admin role. In the baseline, that one fact was false and the route was blocked.
+### The demo in four pictures
+
+**1. The pull request is blocked on the line that opens the route.** The live demo opens on the flagship change as a pull request: line 27 of `snapshots/app-prod.json` flips PassRole from `false` to `true`, the repository's check leaves its note on that line, and the check fails with exit status 1.
+
+![The pull request: the one-line diff, the check's note on line 27 and the failed check](docs/images/pull-request.png)
+
+**2. One changed permission opens a route to the admin role.** The proposal lets the CI deploy user pass the deployment admin role to Lambda. The CI user can already create, invoke and control a Lambda function, so it can now run code as the admin role. In the baseline, that one fact was false and the route was blocked.
 
 ![Verdict, key numbers and the new route in the live demo](docs/images/demo.png)
 
-**2. Amazon Bedrock explains it; the engine decides it.** Amazon Nova Pro writes the plain-English explanation from an evidence packet of placeholder IDs. It cannot add findings, change severity or invent fixes, and a reply that cites anything outside the packet is rejected.
+**3. Amazon Bedrock explains it; the engine decides it.** Amazon Nova Pro writes the plain-English explanation from an evidence packet of placeholder IDs. It cannot add findings, change severity or invent fixes, and a reply that cites anything outside the packet is rejected.
 
-**3. Simulating the revocation closes the route and keeps normal work running.**
+![The recorded Amazon Nova Pro explanation, each entity shown by name, next to its model, region, request ID and token usage](docs/images/explanation.png)
 
-![The route after the simulated fix: the revoked arrow is red and everything after it is faded](docs/images/fixed-path.png)
+**4. Simulating the revocation closes the route and keeps normal work running.**
 
-![Fix card: high-risk paths 1 to 0, normal access 2 of 2, verified in this model](docs/images/fix.png)
+![Fix card: the route after the fix with the revoked arrow red and dashed, high-risk paths 1 to 0, normal access 2 of 2, verified in this model](docs/images/fix.png)
 
-## Run it in one minute
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-Python 3.11 or newer.
 
-```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-```
+
+### Built With
+
+* [![Python][Python-badge]][Python-url]
+* [![Streamlit][Streamlit-badge]][Streamlit-url]
+* [![NetworkX][NetworkX-badge]][NetworkX-url]
+* [![Amazon Bedrock][Bedrock-badge]][Bedrock-url]
+* [![GitHub Actions][Actions-badge]][Actions-url]
+* [![Vercel][Vercel-badge]][Vercel-url]
+* [![pytest][Pytest-badge]][Pytest-url]
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- GETTING STARTED -->
+## Getting Started
+
+The app runs locally in about a minute. Live Amazon Bedrock explanations are optional: without AWS credentials, the app says the explanation is unavailable and shows its deterministic summary.
+
+### Prerequisites
+
+* Python 3.11 or newer
+* Optional, for live explanations: AWS credentials allowed to call `bedrock:InvokeModel` on the model you choose (see [Amazon Bedrock](#amazon-bedrock))
+
+### Installation
+
+1. Clone the repository
+   ```bash
+   git clone https://github.com/Ducksss/attackgraph-ai.git && cd attackgraph-ai
+   ```
+2. Create a virtual environment and install the pinned dependencies
+   ```bash
+   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+   ```
+3. Run the automated suite
+   ```bash
+   .venv/bin/python -m pytest
+   ```
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- USAGE EXAMPLES -->
+## Usage
+
+### Run the app
 
 ```bash
 .venv/bin/streamlit run app.py
@@ -38,11 +172,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 Open http://localhost:8501 for the overview, or go straight to the live demo at http://localhost:8501/demo. The flagship scenario runs as soon as the demo page loads, so the result is visible without a click. The other scenarios open from the switcher or by link: `/demo?scenario=repair`, `/demo?scenario=unknown`, `/demo?scenario=invalid` and `/demo?scenario=upload`. The local app is the one that makes live Amazon Bedrock calls and accepts uploads.
 
-```bash
-.venv/bin/python -m pytest
-```
-
-## Run it as a pull-request check
+### Run it as a pull-request check
 
 The engine also runs from the command line, so a CI job can gate on it. This compares the flagship pair and exits 1:
 
@@ -64,18 +194,7 @@ To see it block a change, open a pull request that sets `f-ci-pass-deploy-admin`
 
 The check sees only what the snapshots declare. Terraform and IAM policies are not parsed, so keeping the snapshots in step with the real infrastructure code is manual. The workflow also runs the pull request's own copy of the engine; a team adopting it would pin a released version instead.
 
-## Status
-
-| Area | State on 30 September 2026 |
-|---|---|
-| Engine: validation, Rules A and B, comparison, fix simulation | Implemented. The automated suite passes (`pytest`). |
-| Streamlit app | Two pages styled after the [Close](https://closecrm.webflow.io/) template: an overview at `/` that explains why the check is needed, and the live demo at `/demo`. Checked in a browser at desktop and phone widths in every scenario, and by headless `streamlit.testing` tests. |
-| Hosted site | [attackgraph-ai.vercel.app](https://attackgraph-ai.vercel.app): a static build of the same two pages for the bundled scenarios (see [Hosting](#hosting)). No uploads and no AI calls. The flagship scenario shows the recorded, reviewed Nova Pro reply from run 8 of the AC-9 evidence. |
-| Bedrock explanation | Live on 29 September 2026: Amazon Nova Pro returned 8 validated explanations out of 10 with prompt `explain-v1`, none with an unsupported access or fix claim ([evidence](docs/evidence/ac9-bedrock-review-2026-09-29.md)). The wording defects found in that run are fixed in `explain-v2`, which has not been run live yet. |
-| Pull-request check | `python -m attackgraph` and a GitHub Actions workflow (see [Run it as a pull-request check](#run-it-as-a-pull-request-check)). Covered by `tests/test_cli.py`, and the workflow script was run against local merge commits for new, changed, renamed, deleted and broken snapshots. On GitHub on 30 September 2026 it passed the pull request that added it and failed the demo pull request ([#3](https://github.com/Ducksss/attackgraph-ai/pull/3)) as intended, with an annotation on line 27 of `snapshots/app-prod.json`. |
-| Demo video | Not started. |
-
-## Amazon Bedrock
+### Amazon Bedrock
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -99,7 +218,7 @@ Read-only: prints the model, region and caller type, and checks that the model e
 
 Sends the demo finding through the real pipeline ten times (chargeable, each call well under one US cent), prints request IDs, token usage and latency, and writes every explanation to `ac9-review.md` for claim-by-claim review.
 
-## Demo script
+### Demo script
 
 1. Open the overview. The hero diagram is the whole idea: a pull request widens `iam:PassRole`, that one change completes all 7 conditions of a route to the admin role, and the engine reports the new path and a verified fix.
 2. Scroll to **Permission reviews miss paths**: the four reasons a line-by-line review misses this.
@@ -111,6 +230,27 @@ Sends the demo finding through the real pipeline ten times (chargeable, each cal
 
 The other scenarios show a comparison that closes the path, an unknown fact that makes the result incomplete rather than safe, and field-level validation errors.
 
+### Hosting
+
+Streamlit needs a long-lived WebSocket server, which Vercel does not run, so the hosted site is a static build. `scripts/build_site.py` runs the engine on every bundled scenario and renders the overview to `site/index.html` and the demo to `site/demo/index.html`, using the same card code as the app. The scenario tabs and the fix toggle switch between pre-computed states in the browser. The flagship's pull-request card comes from `attackgraph/pullrequest.py`, which runs the real check (`python -m attackgraph --github`, laid out as the workflow lays it out) on the pull-request and fix-commit versions of `snapshots/app-prod.json`, so its note and log are that command's output.
+
+The hosted pages make no AI calls and accept no uploads, as the PRD requires for anonymous visitors. The recorded Nova Pro reply appears only while its analysis ID and finding ID match the fresh analysis, so a change to the fixtures or rules hides it instead of showing a stale explanation. `tests/test_site.py` fails when the committed build is out of date.
+
+```bash
+.venv/bin/python scripts/build_site.py
+```
+
+```bash
+cd site && vercel deploy --prod
+```
+
+If you host the Streamlit app itself, restrict it to bundled fixtures or set `ATTACKGRAPH_AI=off`. Do not expose an anonymous upload endpoint that can trigger chargeable Bedrock calls.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- HOW IT WORKS -->
 ## How it works
 
 ```text
@@ -127,7 +267,7 @@ baseline.json + proposed.json (synthetic)
         |                     Amazon Bedrock (explanation only, aliased evidence)
         +---------------+---------------+
                         |
-              Streamlit workspace + Markdown report
+      Streamlit app, static site, Markdown report and pull-request check
 ```
 
 ### Snapshot format
@@ -186,6 +326,36 @@ Complete candidates rank by fewest failing expected-access checks, then most fin
 - Successful replies are cached per analysis, finding, fix, model and prompt version, and a cached reply is labelled. A reply produced for different inputs is never shown.
 - Model text is escaped before rendering. Each alias in a reply is shown as the name it stands for, in a tag set apart from the prose, so an uploaded label can never read as the model's own words; facts, checks and fixes keep their IDs. Identifier checks cannot prove that the prose is true, so review generated claims against the evidence.
 
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- ROADMAP -->
+## Roadmap
+
+State on 30 September 2026.
+
+- [x] Engine: validation, Rules A and B, comparison and fix simulation. The automated suite passes (`pytest`).
+- [x] Streamlit app: two pages styled after the [Close](https://closecrm.webflow.io/) template, an overview at `/` that explains why the check is needed and the live demo at `/demo`. Checked in a browser at desktop and phone widths in every scenario, and by headless `streamlit.testing` tests.
+- [x] Hosted site: [attackgraph-ai.vercel.app](https://attackgraph-ai.vercel.app), a static build of the same two pages for the bundled scenarios (see [Hosting](#hosting)). No uploads and no AI calls. The flagship scenario shows the recorded, reviewed Nova Pro reply from run 8 of the AC-9 evidence.
+- [x] Bedrock explanation: live on 29 September 2026, Amazon Nova Pro returned 8 validated explanations out of 10 with prompt `explain-v1`, none with an unsupported access or fix claim ([evidence](docs/evidence/ac9-bedrock-review-2026-09-29.md)).
+- [x] Pull-request check: `python -m attackgraph` and a GitHub Actions workflow (see [Run it as a pull-request check](#run-it-as-a-pull-request-check)). Covered by `tests/test_cli.py`, and the workflow script was run against local merge commits for new, changed, renamed, deleted and broken snapshots. On GitHub on 30 September 2026 it passed the pull request that added it and failed the demo pull request ([#3](https://github.com/Ducksss/attackgraph-ai/pull/3)) as intended, with an annotation on line 27 of `snapshots/app-prod.json`.
+- [x] Brand kit and Devpost submission assets, in [`docs/brand/`](docs/brand/) and [`docs/devpost/`](docs/devpost/).
+- [ ] A live AC-9 run of `explain-v2`, which fixes the wording defects found in the first run
+- [ ] Demo video
+- [ ] Beyond the prototype (not started)
+    - [ ] Terraform plans and IAM policies as input, instead of hand-written snapshots
+    - [ ] Policy evaluation: SCPs, permissions boundaries, conditions and explicit denies
+    - [ ] More rule families, such as `sts:AssumeRole` chains and EC2 instance profiles
+    - [ ] Multi-account analysis, and fixes that find the smallest set of revocations
+
+See the [open issues](https://github.com/Ducksss/attackgraph-ai/issues) for known issues and requests.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- ACCEPTANCE CRITERIA -->
 ## Acceptance criteria
 
 | ID | Where it is checked |
@@ -205,6 +375,11 @@ Complete candidates rank by fewest failing expected-access checks, then most fin
 
 Performance, measured on the build laptop against the two-second target: the bundled comparison plus fix simulation takes about 5 ms. A generated 100-node, 300-fact pair compares in about 1.5 s, and each fix simulation on it adds about 0.7 s.
 
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- LIMITATIONS -->
 ## Limitations
 
 - Only the two rule families above are modelled. There is no Terraform or CloudFormation parsing, IAM policy evaluation, EC2, general AssumeRole, live discovery, multi-account analysis or automatic remediation.
@@ -213,23 +388,12 @@ Performance, measured on the build laptop against the two-second target: the bun
 - Results describe the declared synthetic model. They are not a detection rate on real cloud environments.
 - The pull-request check compares the snapshots in the repository. It cannot see an infrastructure change that nobody reflected in them.
 
-## Hosting
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-Streamlit needs a long-lived WebSocket server, which Vercel does not run, so the hosted site is a static build. `scripts/build_site.py` runs the engine on every bundled scenario and renders the overview to `site/index.html` and the demo to `site/demo/index.html`, using the same card code as the app. The scenario tabs and the fix toggle switch between pre-computed states in the browser. The flagship's pull-request card comes from `attackgraph/pullrequest.py`, which runs the real check (`python -m attackgraph --github`, laid out as the workflow lays it out) on the pull-request and fix-commit versions of `snapshots/app-prod.json`, so its note and log are that command's output.
 
-The hosted pages make no AI calls and accept no uploads, as the PRD requires for anonymous visitors. The recorded Nova Pro reply appears only while its analysis ID and finding ID match the fresh analysis, so a change to the fixtures or rules hides it instead of showing a stale explanation. `tests/test_site.py` fails when the committed build is out of date.
 
-```bash
-.venv/bin/python scripts/build_site.py
-```
-
-```bash
-cd site && vercel deploy --prod
-```
-
-If you host the Streamlit app itself, restrict it to bundled fixtures or set `ATTACKGRAPH_AI=off`. Do not expose an anonymous upload endpoint that can trigger chargeable Bedrock calls.
-
-## Layout
+<!-- PROJECT LAYOUT -->
+## Project layout
 
 ```text
 app.py                         Streamlit router: overview at /, live demo at /demo
@@ -237,6 +401,7 @@ views/overview.py              overview page
 views/demo.py                  live demo: scenario switching, uploads, Bedrock, fix simulation
 attackgraph/landing.py         overview sections: pipeline diagram, why, how, trust, footer
 attackgraph/page.py            demo cards shared by the app and the static build
+attackgraph/pullrequest.py     the flagship's pull-request card: the real check on the demo change and its fix
 attackgraph/scenarios.py       bundled scenarios
 attackgraph/story.py           plain-language view of one finding (path, conditions, changes)
 attackgraph/web.py             Close-style CSS and escaped HTML fragments
@@ -257,7 +422,91 @@ scripts/check_bedrock.py       Bedrock access and AC-9 evidence
 scripts/build_site.py          static build of both pages for Vercel
 .github/workflows/             permission-check.yml: the pull-request check
 site/                          the built site: index.html, demo/, reports/, vercel.json
+docs/brand/                    logo, palette, social preview and brand guide
+docs/devpost/                  Devpost submission text, thumbnail and gallery
 docs/evidence/                 recorded live Bedrock runs and their review
 docs/images/                   README screenshots of the hosted build
 tests/                         automated suite
 ```
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- CONTRIBUTING -->
+## Contributing
+
+Suggestions and fixes are welcome. For anything bigger than a small fix, open an issue first so the change can be discussed.
+
+1. Fork the project
+2. Create a feature branch (`git checkout -b feat/amazing-feature`)
+3. Run the suite (`.venv/bin/python -m pytest`). If you change the fixtures, the rules or the UI, rebuild the static site with `.venv/bin/python scripts/build_site.py`, because `tests/test_site.py` fails when the committed build is out of date
+4. Commit your changes (`git commit -m "feat: add amazing feature"`)
+5. Push the branch (`git push origin feat/amazing-feature`)
+6. Open a pull request. The permission check runs on it, and a snapshot change that opens a new path fails the check
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- LICENCE -->
+## Licence
+
+This project does not have a licence yet, so the default copyright rules apply ([what that means](https://choosealicense.com/no-permission/)).
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- CONTACT -->
+## Contact
+
+Chai Pin Zheng: [@Ducksss](https://github.com/Ducksss) on GitHub
+
+Project link: [github.com/Ducksss/attackgraph-ai](https://github.com/Ducksss/attackgraph-ai) · Live site: [attackgraph-ai.vercel.app](https://attackgraph-ai.vercel.app)
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- ACKNOWLEDGEMENTS -->
+## Acknowledgements
+
+* [Best-README-Template](https://github.com/othneildrew/Best-README-Template), the structure of this README
+* [Close](https://closecrm.webflow.io/) Webflow template, the visual style of the app and the hosted site
+* [Amazon Bedrock](https://aws.amazon.com/bedrock/) and [Amazon Nova](https://aws.amazon.com/ai/generative-ai/nova/), the explanations
+* [NetworkX](https://networkx.org/), [jsonschema](https://python-jsonschema.readthedocs.io/) and [Streamlit](https://streamlit.io/), the engine and the app
+* [Inter](https://rsms.me/inter/), [JetBrains Mono](https://www.jetbrains.com/lp/mono/) and [Material Symbols](https://fonts.google.com/icons), the type and icons
+* [Shields.io](https://shields.io/), the badges
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- MARKDOWN LINKS & IMAGES -->
+<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
+[demo-shield]: https://img.shields.io/badge/live_demo-attackgraph--ai.vercel.app-6366f1?style=for-the-badge&logo=vercel&logoColor=white
+[demo-url]: https://attackgraph-ai.vercel.app/demo
+[bedrock-shield]: https://img.shields.io/badge/Amazon_Bedrock-Nova_Pro-232F3E?style=for-the-badge
+[bedrock-url]: #amazon-bedrock
+[python-shield]: https://img.shields.io/badge/python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white
+[python-url]: #prerequisites
+[check-shield]: https://img.shields.io/badge/pull--request_check-GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white
+[check-url]: .github/workflows/permission-check.yml
+[synthetic-shield]: https://img.shields.io/badge/data-synthetic_only-5f5f72?style=for-the-badge
+[synthetic-url]: #limitations
+[product-screenshot]: docs/images/hero.png
+[Python-badge]: https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white
+[Python-url]: https://www.python.org/
+[Streamlit-badge]: https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white
+[Streamlit-url]: https://streamlit.io/
+[NetworkX-badge]: https://img.shields.io/badge/NetworkX-2C5AA0?style=for-the-badge
+[NetworkX-url]: https://networkx.org/
+[Bedrock-badge]: https://img.shields.io/badge/Amazon_Bedrock-232F3E?style=for-the-badge
+[Bedrock-url]: https://aws.amazon.com/bedrock/
+[Actions-badge]: https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white
+[Actions-url]: https://github.com/features/actions
+[Vercel-badge]: https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white
+[Vercel-url]: https://vercel.com/
+[Pytest-badge]: https://img.shields.io/badge/pytest-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white
+[Pytest-url]: https://docs.pytest.org/
