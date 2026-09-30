@@ -1,0 +1,111 @@
+1
+00:00:04,000 --> 00:00:08,160
+Does this pull request create new access to a privileged role?
+
+2
+00:00:08,200 --> 00:00:12,760
+Review sees one changed word on line 27: false becomes true.
+
+3
+00:00:12,800 --> 00:00:17,360
+The risk is what it completes: older grants that each look harmless.
+
+4
+00:00:17,400 --> 00:00:21,460
+The repository's AttackGraph AI check fails, and says why.
+
+5
+00:00:21,500 --> 00:00:26,860
+This line lets the CI deploy user run code as the deployment admin role.
+
+6
+00:00:26,900 --> 00:00:30,960
+The check makes no AWS calls and needs no secrets.
+
+7
+00:00:31,000 --> 00:00:36,160
+AttackGraph AI compares the current and the proposed configuration.
+
+8
+00:00:36,200 --> 00:00:41,360
+This change widens iam:PassRole and completes all 7 conditions of a route to admin.
+
+9
+00:00:41,400 --> 00:00:50,860
+The demo runs the same check on the same one-line change.
+
+10
+00:00:50,900 --> 00:00:54,793
+Apply the suggested fix: the fix commit reverts the line.
+
+11
+00:00:54,833 --> 00:00:58,993
+The check runs again on the fix commit, and passes.
+
+12
+00:00:59,033 --> 00:01:04,293
+Inside the check: high-risk paths go from 0 to 1, and coverage is complete.
+
+13
+00:01:04,333 --> 00:01:09,693
+The route: CI deploy user, through the post-build hook, to the deployment admin role.
+
+14
+00:01:09,733 --> 00:01:13,727
+The amber arrow is the one changed fact: false becomes true.
+
+15
+00:01:13,767 --> 00:01:18,527
+A route counts only when every condition holds: here, 7 of 7.
+
+16
+00:01:18,567 --> 00:01:22,527
+Six already held, one of them a stated scenario assumption.
+
+17
+00:01:22,567 --> 00:01:25,827
+The new permission was the missing piece.
+
+18
+00:01:25,867 --> 00:01:31,860
+One live call to Amazon Nova Pro on Amazon Bedrock.
+
+19
+00:01:31,900 --> 00:01:37,893
+The live reply, with its request ID. The page maps placeholders back to names.
+
+20
+00:01:37,933 --> 00:01:41,893
+The model sees placeholder IDs, never names.
+
+21
+00:01:41,933 --> 00:01:45,593
+A reply that cites anything outside the evidence is discarded.
+
+22
+00:01:45,633 --> 00:01:49,793
+The engine decides findings, severity and fixes. The model only explains.
+
+23
+00:01:52,467 --> 00:01:57,460
+The engine tests the fix: revoke that one permission on a copy, rerun everything.
+
+24
+00:01:57,500 --> 00:02:02,560
+High-risk paths drop from 1 to 0. Normal access still passes: 2 of 2.
+
+25
+00:02:02,600 --> 00:02:07,060
+Verified in this model, not promised for a real account.
+
+26
+00:02:07,100 --> 00:02:12,793
+The limits are up front: synthetic data only, nothing deployed or executed.
+
+27
+00:02:12,833 --> 00:02:17,127
+Two explicit rules, not all of AWS.
+
+28
+00:02:17,167 --> 00:02:20,527
+An unknown is never reported as safe.

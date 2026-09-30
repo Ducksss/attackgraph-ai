@@ -1,0 +1,29 @@
+# AttackGraph AI demo video: shot list
+
+Final cut: `attackgraph-ai-demo.mp4`, 2:28.6 (148.6 s), 1920x1080, 30 fps, H.264 + silent AAC. Captions are burned in and also in `attackgraph-ai-demo.srt`.
+Assembled 2026-09-30T10:33:59.270Z.
+
+| Shot | Time | Source | On screen | Captions (start time and text) | Hosted overview |
+|---|---|---|---|---|---|
+| 0 (title) | 0:00.0–0:04.0 | Card | Logo, name and one-line description | (no caption; the card's own text) |  |
+| 1 | 0:04.0–0:17.4 | GitHub: https://github.com/Ducksss/attackgraph-ai/pull/3/files | PR #3, Files changed: line 27 of snapshots/app-prod.json, false to true, with the check's annotation | 0:04.0 "Does this pull request create new access to a privileged role?"<br>0:08.2 "Review sees one changed word on line 27: false becomes true."<br>0:12.8 "The risk is what it completes: older grants that each look harmless." |  |
+| 2 | 0:17.4–0:31.0 | GitHub: https://github.com/Ducksss/attackgraph-ai/actions/runs/36677079723 | The PR's latest Permission check run: AttackGraph AI failed, annotation 'New path to a protected role' | 0:17.4 "The repository's AttackGraph AI check fails, and says why."<br>0:21.5 "This line lets the CI deploy user run code as the deployment admin role."<br>0:26.9 "The check makes no AWS calls and needs no secrets." |  |
+| 3 | 0:31.0–0:41.4 | Hosted: https://attackgraph-ai.vercel.app/ | Overview hero: headline, 'then tests the fix', and the diagram: 7 conditions, engine, new path found, verified fix | 0:31.0 "AttackGraph AI compares the current and the proposed configuration."<br>0:36.2 "This change widens iam:PassRole and completes all 7 conditions of a route to admin." | yes |
+| 4 | 0:41.4–0:59.0 | Local: http://localhost:8599/demo | The pull request card: diff, note on line 27, failing check; Apply the suggested fix; check passes | 0:41.4 "The demo runs the same check on the same one-line change."<br>0:50.9 "Apply the suggested fix: the fix commit reverts the line."<br>0:54.8 "The check runs again on the fix commit, and passes." |  |
+| 5 | 0:59.0–1:13.8 | Local: http://localhost:8599/demo | Verdict '1 new path to a protected role', stats, The path it opens (amber arrow), The change | 0:59.0 "Inside the check: high-risk paths go from 0 to 1, and coverage is complete."<br>1:04.3 "The route: CI deploy user, through the post-build hook, to the deployment admin role."<br>1:09.7 "The amber arrow is the one changed fact: false becomes true." |  |
+| 6 | 1:13.8–1:25.9 | Local: http://localhost:8599/demo | Why the route works: 7 of 7 hold, the changed condition, the scenario assumption | 1:13.8 "A route counts only when every condition holds: here, 7 of 7."<br>1:18.6 "Six already held, one of them a stated scenario assumption."<br>1:22.6 "The new permission was the missing piece." |  |
+| 7 | 1:25.9–1:49.8 | Local: http://localhost:8599/demo (live AI reply) | What this means: Explain with Amazon Bedrock, the live reply with names as tags, Model/Region/Request, What the model sees | 1:25.9 "One live call to Amazon Nova Pro on Amazon Bedrock."<br>1:31.9 "The live reply, with its request ID. The page maps placeholders back to names."<br>1:37.9 "The model sees placeholder IDs, never names."<br>1:41.9 "A reply that cites anything outside the evidence is discarded."<br>1:45.6 "The engine decides findings, severity and fixes. The model only explains." |  |
+| 8 | 1:49.8–2:07.1 | Local: http://localhost:8599/demo | The fix: Simulate the fix; the cut route, 1 -> 0, 2 of 2, Verified in this model | 1:52.5 "The engine tests the fix: revoke that one permission on a copy, rerun everything."<br>1:57.5 "High-risk paths drop from 1 to 0. Normal access still passes: 2 of 2."<br>2:02.6 "Verified in this model, not promised for a real account." |  |
+| 9 | 2:07.1–2:20.6 | Hosted: https://attackgraph-ai.vercel.app/ | Trust and limits: the six chips; FAQ 'Can it block a pull request?' and 'What is out of scope?' opened | 2:07.1 "The limits are up front: synthetic data only, nothing deployed or executed."<br>2:12.8 "Two explicit rules, not all of AWS."<br>2:17.2 "An unknown is never reported as safe." | yes |
+| 10 (end card) | 2:20.6–2:28.6 | Card | Links, technologies, synthetic data only, visual style credit | (no caption; the card's own text) |  |
+
+**From the hosted site's overview:** shot 3 (hosted-hero) and shot 9 (hosted-trust). These are the shots to re-shoot after the overview is redeployed: `node scripts/make.mjs 3 9`.
+
+## Notes on the submitted cut
+
+- To rebuild the video, see [`scripts/video/README.md`](../../scripts/video/README.md).
+- Shot 7 is a live take: one Converse call to apac.amazon.nova-pro-v1:0 in ap-southeast-1, prompt explain-v2, request 3db7bd2c-dd53-4f43-817b-56ae57d0dedb (1,637 in, 202 out, 1.3 s), press 2 of 3. Every press is logged in `logs/bedrock-presses.jsonl` and every reply in `logs/bedrock-reply-*.json`; earlier takes are kept as `clips/07-live-take-*.mp4`.
+- Hosted shots 3 and 9 were captured after the 30 September redeploy (hero: "then tests the fix"). The recorded-reply fallback for shot 7 (`--recorded`, the hosted demo's explain-v2 reply, request ebf66418-50b4-4e8f-8ee2-8675d76a6fb0) is scripted but was not needed.
+- GitHub, signed out: Files changed shows the check's note on line 27 twice, because PR #3 has two failing runs of the check (13:50 and 14:12 SGT). The Checks tab would not expand its annotations signed out, so shot 2 uses the latest run's summary page, which shows the failed AttackGraph AI job and the note's title "New path to a protected role".
+- Streamlit's hover tooltips are hidden with CSS during capture (the drawn cursor dwells on buttons while frames are captured).
+- Captions: at most 14 words, at least 2.5 s on screen, at most 3 words per second; make.mjs checks all three on every assembly.
