@@ -69,6 +69,12 @@ All three come from Google Fonts.
 - State limits up front: synthetic data only, nothing is deployed.
 - Sentence case for headings in the product, and no em dashes.
 
-## How these files were made
+## Regenerating the images
 
-The mark is hand-written SVG. The PNGs were drawn in HTML with the tokens above and rendered with headless Chrome at 2× (the social preview at 1×). The Devpost images in [`../devpost/`](../devpost/) use the same kit.
+The mark is hand-written SVG. Every PNG here, in [`../devpost/`](../devpost/) and in [`../images/`](../images/) comes from [`scripts/build_assets.py`](../../scripts/build_assets.py). The product screenshots are crops of the static build in `site/`. The rest are HTML pages drawn with the tokens above. Headless Chrome renders them all at 2×, except the social preview at 1×.
+
+```bash
+.venv/bin/python scripts/build_site.py && .venv/bin/python scripts/build_assets.py
+```
+
+It needs Node 22 or newer, Google Chrome (set `CHROME` if it isn't found) and a network connection for the Google Fonts. Text is baked into the images, so after changing the site's wording, the recorded reply or the UI, re-render rather than editing a PNG. Only files that changed visibly are replaced; the anti-aliasing noise between two renders is ignored.
