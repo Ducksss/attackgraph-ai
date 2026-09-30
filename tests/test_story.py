@@ -3,10 +3,11 @@
 import re
 from pathlib import Path
 
-from helpers import ADMIN_FINDING, PASSROLE_FACT, baseline_doc, proposed_doc, read_doc, set_state, to_snapshot
+from helpers import ADMIN_FINDING, PASSROLE_FACT, baseline_doc, proposed_doc, read_doc, set_state, to_bytes, to_snapshot
 
 from attackgraph import page, web
 from attackgraph.compare import compare_snapshots
+from attackgraph.pipeline import run
 from attackgraph.simulate import best_fix_for, fix_candidates
 from attackgraph.story import build_story, summary
 
@@ -31,6 +32,27 @@ def test_changed_condition_comes_first_and_baseline_blocker_is_recorded():
     assert conditions[0].fact_id == PASSROLE_FACT and conditions[0].change == "false → true"
     assert [c.fact_id for c in story.changes] == [PASSROLE_FACT]
     assert story.steps[0].baseline_state == "false" and story.steps[0].baseline_blockers == (PASSROLE_FACT,)
+    texts = [c.text for c in conditions]
+    assert "CI deploy user (build pipeline) controls the code that Post-build hook function runs" in texts
+
+
+def test_the_blocked_note_names_only_the_false_conditions():
+    both = compare_snapshots(to_snapshot(set_state(baseline_doc(), "f-deploy-admin-trusts-lambda", "false")), to_snapshot(proposed_doc()))
+    note = page.path_card(build_story(both, both.delta(ADMIN_FINDING)))
+    assert 'f-ci-pass-deploy-admin</span> and <span class="ag-mono">f-deploy-admin-trusts-lambda</span> were false.' in note
+    unknown = compare_snapshots(to_snapshot(set_state(baseline_doc(), "f-deploy-admin-trusts-lambda", "unknown")), to_snapshot(proposed_doc()))
+    story = build_story(unknown, unknown.delta(ADMIN_FINDING))
+    assert story.steps[0].baseline_blockers == (PASSROLE_FACT,)  # the unknown trust did not block anything
+
+
+def test_the_incomplete_banner_counts_each_open_item_once_and_by_kind():
+    unknown = read_doc("examples/unknown-prerequisite.json")
+    same = run(to_bytes(unknown), "b.json", to_bytes(unknown), "p.json")  # one unresolved relationship, on both sides
+    assert "1 relationship could not be resolved, so nothing here is a safe verdict. The unresolved condition is marked below." in page.verdict(same)
+    scp = run(to_bytes(baseline_doc()), "b.json", to_bytes(read_doc("examples/unresolved-policy-control.json")), "p.json")
+    assert "4 relationships could not be resolved and 1 policy control is unresolved" in page.verdict(scp)
+    assert "The unresolved conditions are marked below." in page.verdict(scp)
+    assert "4 unresolved relationships, 1 unresolved policy control" in page.stats(scp)
 
 
 def test_summary_states_only_engine_facts():

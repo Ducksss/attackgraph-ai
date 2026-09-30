@@ -24,6 +24,20 @@ def plural(count: int, noun: str) -> str:
     return f"{count} {noun}{'' if count == 1 else 's'}"
 
 
+def join(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def open_items(comparison: Comparison) -> dict[str, int]:
+    """Distinct unresolved items across both snapshots, by kind: one unresolved in both counts once."""
+    issues = [issue for a in (comparison.baseline, comparison.proposal) for issue in a.coverage.issues]
+    return {
+        "relationship": len({i.candidate_id for i in issues if i.kind == "unresolved_candidate"}),
+        "policy control": len({i.message for i in issues if i.kind == "policy_control"}),
+        "unmodelled mechanism": len({i.message for i in issues if i.kind == "unmodelled_mechanism"}),
+    }
+
+
 def model_name(model_id: str) -> str:
     return next((name for key, name in MODEL_NAMES.items() if key in model_id), model_id)
 
@@ -48,13 +62,18 @@ def verdict(result: PipelineResult) -> str:
     removed = comparison.count("removed")
     resolved = "Every relationship resolved. Complete for the declared synthetic model, not for a real AWS account."
     if comparison.verdict == "incomplete":
-        unresolved = len(comparison.baseline.coverage.issues) + len(comparison.proposal.coverage.issues)
-        return web.verdict(
-            "unknown",
-            "Analysis incomplete",
-            f"{plural(unresolved, 'relationship')} could not be resolved, so nothing here is a safe verdict. "
-            "The unresolved condition is marked below.",
-        )
+        counts = open_items(comparison)
+        parts = []
+        if counts["relationship"]:
+            parts.append(f"{plural(counts['relationship'], 'relationship')} could not be resolved")
+        for kind, state in (("policy control", "unresolved"), ("unmodelled mechanism", "declared")):
+            if counts[kind]:
+                parts.append(f"{plural(counts[kind], kind)} {'is' if counts[kind] == 1 else 'are'} {state}")
+        if counts["relationship"]:
+            where = "The unresolved condition is marked below." if counts["relationship"] == 1 else "The unresolved conditions are marked below."
+        else:
+            where = "The coverage evidence below lists them."
+        return web.verdict("unknown", "Analysis incomplete", f"{join(parts)}, so nothing here is a safe verdict. {where}")
     if added:
         kinds = {d.impact for d in added}
         target = "role" if kinds == {"privileged_role_use"} else "data" if kinds == {"sensitive_object_read"} else "resource"
@@ -76,7 +95,7 @@ def stats(result: PipelineResult, sim: FixCandidate | None = None) -> str:
     risk_note = f"Baseline {before}, proposed {after}"
     if sim:
         risk_note += f", after simulated fix {sim.simulated.high_risk_count}"
-    unresolved = len(comparison.proposal.coverage.issues) + len(comparison.baseline.coverage.issues)
+    unresolved = ", ".join(plural(n, f"unresolved {kind}") for kind, n in open_items(comparison).items() if n)
     fix = best_fix_for(result.fixes, added[0].id) if added else None
     if not comparison.complete:
         fix_card = ("Verified fix", "Not yet", "A fix cannot be verified while a condition is unknown", "")
@@ -100,7 +119,7 @@ def stats(result: PipelineResult, sim: FixCandidate | None = None) -> str:
             (
                 "Coverage",
                 "Complete" if comparison.complete else "Incomplete",
-                "Every relationship resolved" if comparison.complete else plural(unresolved, "unresolved relationship"),
+                "Every relationship resolved" if comparison.complete else unresolved,
                 "good" if comparison.complete else "risk",
             ),
             fix_card,
@@ -185,10 +204,10 @@ def path_card(story: Story, sim: FixCandidate | None = None) -> str:
     blocked = ""
     if delta.status == "added" and all(step.baseline_state == "false" for step in story.steps):
         ids = sorted({b for step in story.steps for b in step.baseline_blockers})
+        names = join([f'<span class="ag-mono">{web.esc(i)}</span>' for i in ids])
         blocked = (
-            '<p class="ag-note">In the baseline the same route was blocked because '
-            + ", ".join(f'<span class="ag-mono">{web.esc(i)}</span>' for i in ids)
-            + " was false.</p>"
+            f'<p class="ag-note">In the baseline the same route was blocked because {names} '
+            f'{"was" if len(ids) == 1 else "were"} false.</p>'
         )
     revoked = sim.fact_id if mode == "simulated" else None
     return (
