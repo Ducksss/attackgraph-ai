@@ -1,23 +1,27 @@
+# FROZEN ORACLE. A verbatim copy of attackgraph/simulate.py at commit a222929, the engine
+# before the Rule B performance work. tests/test_differential.py runs it beside the
+# live engine and requires identical results. Do not edit, reformat or fix it: only
+# the imports differ from the original, so that the copies use each other.
+
 """Test single-permission revocations on in-memory copies of the proposal.
 
 A fix candidate is a grant that the baseline declared false and the proposal
 turns true under the same fact ID, and that participates in a proposal
 finding. Revoking it sets the state back to false on a copy: the record and
 its provenance stay, because deleting a fact would make it unknown. Every
-candidate is re-analysed in full; no derived edge is ever removed directly,
-since another route could recreate it. The re-analysis reuses the proposal's
-evaluated candidates whose inputs the revocation leaves unchanged (see
-analysis.analyze), which gives the same result as starting from scratch.
+candidate is re-analysed from scratch; no derived edge is ever removed
+directly, since another route could recreate it.
 """
 
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass, replace
 
-from .analysis import FALSE, TRUE, ExpectedAccessResult, SnapshotAnalysis, analyze
-from .compare import Comparison
-from .snapshot import Fact
+import networkx as nx
+
+from .analysis_v1 import FALSE, ExpectedAccessResult, SnapshotAnalysis, analyze
+from .compare_v1 import Comparison
+from attackgraph.snapshot import Fact
 
 # Each candidate is a full re-analysis; the cap bounds the worst case for large uploads.
 MAX_FIX_CANDIDATES = 25
@@ -68,40 +72,16 @@ class FixCandidate:
         return f"Revoke {self.fact_id}: {self.proposal_fact.describe()}"
 
 
-def _closure(adjacency: dict[str, set[str]], start: set[str]) -> set[str]:
-    seen, stack = set(start), list(start)
-    while stack:
-        for node in adjacency.get(stack.pop(), ()):
-            if node not in seen:
-                seen.add(node)
-                stack.append(node)
-    return seen
-
-
 def participating_fact_ids(analysis: SnapshotAnalysis) -> frozenset[str]:
-    """Facts on some established route from an entry principal to a finding's target.
-
-    The established edges are the candidates whose state is true. An edge is on
-    such a route when its subject is reachable from the finding's entry and its
-    target reaches the finding's target. Findings that share an entry share the
-    first condition, so each entry is walked once, backwards from all of its
-    targets together.
-    """
-    edges = [c for c in analysis.candidates.values() if c.state == TRUE]
-    forward: dict[str, set[str]] = defaultdict(set)
-    backward: dict[str, set[str]] = defaultdict(set)
-    for c in edges:
-        forward[c.subject].add(c.target)
-        backward[c.target].add(c.subject)
-    targets: dict[str, set[str]] = defaultdict(set)
-    for finding in analysis.findings.values():
-        targets[finding.entry].add(finding.target)
+    """Facts on some established route from an entry principal to a finding's target."""
+    graph = analysis.established_graph
     ids: set[str] = set()
-    for entry, finding_targets in targets.items():
-        reach, coreach = _closure(forward, {entry}), _closure(backward, finding_targets)
-        for c in edges:
-            if c.subject in reach and c.target in coreach:
-                ids.update(c.fact_ids)
+    for finding in analysis.findings.values():
+        reach = nx.descendants(graph, finding.entry) | {finding.entry}
+        coreach = nx.ancestors(graph, finding.target) | {finding.target}
+        for u, v, data in graph.edges(data=True):
+            if u in reach and v in coreach:
+                ids.update(data["candidate"].fact_ids)
     return frozenset(ids)
 
 
@@ -123,7 +103,7 @@ def fix_candidates(comparison: Comparison, limit: int = MAX_FIX_CANDIDATES) -> t
     tested: list[FixCandidate] = []
     for fact_id in eligible_grants(comparison)[:limit]:
         change = comparison.fact_change(fact_id)
-        simulated = analyze(proposal.snapshot.with_fact_state(change.fact_id, FALSE), reuse=proposal)
+        simulated = analyze(proposal.snapshot.with_fact_state(change.fact_id, FALSE))
         tested.append(
             FixCandidate(
                 id=f"revoke/{change.fact_id}",

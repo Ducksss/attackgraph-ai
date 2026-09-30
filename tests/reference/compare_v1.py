@@ -1,3 +1,8 @@
+# FROZEN ORACLE. A verbatim copy of attackgraph/compare.py at commit a222929, the engine
+# before the Rule B performance work. tests/test_differential.py runs it beside the
+# live engine and requires identical results. Do not edit, reformat or fix it: only
+# the imports differ from the original, so that the copies use each other.
+
 """Compare the findings of two analysed snapshots.
 
 Finding identity is (entry principal, protected target, impact kind), so
@@ -13,8 +18,8 @@ import hashlib
 from dataclasses import dataclass
 from functools import cached_property
 
-from . import ENGINE_VERSION, MODEL_VERSION
-from .analysis import (
+from attackgraph import ENGINE_VERSION, MODEL_VERSION
+from .analysis_v1 import (
     FALSE,
     IMPACTS,
     TRUE,
@@ -23,7 +28,7 @@ from .analysis import (
     SnapshotAnalysis,
     analyze,
 )
-from .snapshot import POLICY_CONTROLS, Fact, Snapshot
+from attackgraph.snapshot import POLICY_CONTROLS, Fact, Snapshot
 
 STATUS_ORDER = {"added": 0, "inconclusive": 1, "unchanged": 2, "removed": 3}
 
@@ -272,6 +277,4 @@ def compare(baseline: SnapshotAnalysis, proposal: SnapshotAnalysis) -> Compariso
 
 
 def compare_snapshots(baseline: Snapshot, proposal: Snapshot) -> Comparison:
-    # A proposal usually changes a few facts, so it reuses most of the baseline's evaluated candidates.
-    before = analyze(baseline)
-    return compare(before, analyze(proposal, reuse=before))
+    return compare(analyze(baseline), analyze(proposal))
