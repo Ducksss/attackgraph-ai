@@ -30,7 +30,7 @@ sys.path.insert(0, str(ROOT))
 
 from attackgraph import ENGINE_VERSION, MODEL_VERSION, landing, page, web  # noqa: E402
 from attackgraph.analysis import Finding  # noqa: E402
-from attackgraph.explain import DEFAULT_MODEL_ID, build_packet  # noqa: E402
+from attackgraph.explain import DEFAULT_MODEL_ID, build_packet, stored_segments  # noqa: E402
 from attackgraph.render import step_text  # noqa: E402
 from attackgraph.report import build_report  # noqa: E402
 from attackgraph.scenarios import SCENARIO_LABELS, SCENARIOS, UPLOAD, run_scenario  # noqa: E402
@@ -123,7 +123,7 @@ SCRIPT = """
 
 FAVICON = (
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' "
-    "rx='7' fill='%2353db78'/%3E%3Cpath d='M9 10h9a4 4 0 0 1 0 8h-4a4 4 0 0 0 0 8h9' fill='none' stroke='%23032b0c' "
+    "rx='7' fill='%236366f1'/%3E%3Cpath d='M9 10h9a4 4 0 0 1 0 8h-4a4 4 0 0 0 0 8h9' fill='none' stroke='%23ffffff' "
     "stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E"
 )
 
@@ -150,10 +150,11 @@ def ai_card(result, delta, story, recorded: dict | None) -> str:
     fix = next((f for f in result.fixes if f.removes(delta.id)), None)
     plain = " ".join(summary(story, fix))
     if recorded:
-        text = (
-            badge("green", "Recorded AI explanation")
-            + f'<p class="ag-summary">{esc(recorded["summary"])}</p>'
-            f'<p class="ag-note"><strong>Limitations:</strong> {esc(recorded["limitations"])}</p>'
+        text = page.ai_reply(
+            stored_segments(recorded["summary"], packet),
+            stored_segments(recorded["limitations"], packet),
+            story,
+            "Recorded AI explanation",
         )
         side = (
             web.meta_list(
@@ -198,10 +199,11 @@ def fix_card(result, delta, story) -> str:
         '<button type="button" class="ag-btn ag-btn-ghost ag-sim-on" data-action="reset">Reset simulation</button>'
         "</div>"
     )
-    left = page.fix_intro(chosen, best, story) + buttons + f'<div class="ag-sim-on">{page.fix_result(comparison, delta, chosen)}</div>'
+    left = page.fix_intro(chosen, best, story) + buttons
     before, after = page.expected_block(comparison), page.expected_block(comparison, chosen)
     right = f'<div><div class="ag-sim-off">{before}</div><div class="ag-sim-on">{after}</div></div>' if before else ""
-    return head + f'<div class="ag-split"><div>{left}</div>{right}</div>'
+    result_html = f'<div class="ag-sim-on">{page.fix_result(comparison, story, chosen)}</div>'
+    return head + f'<div class="ag-split"><div>{left}</div>{right}</div>' + result_html
 
 
 def condition_rows(candidate, comparison) -> str:

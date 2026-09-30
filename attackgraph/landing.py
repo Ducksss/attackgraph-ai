@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 from . import web
+from .explain import build_packet, stored_segments
 from .pipeline import PipelineResult
 from .simulate import best_fix_for
 from .story import build_story, label
@@ -331,8 +332,9 @@ def how(result: PipelineResult, recorded: dict | None) -> str:
     fix = best_fix_for(result.fixes, delta.id)
     if recorded:
         first = recorded["summary"].split(". ", 1)[0].rstrip(".") + "."
+        named = web.reply(stored_segments(first, build_packet(comparison, delta, result.fixes)), story.nodes)
         quote = (
-            f'<span class="ag-badge green">Recorded Nova Pro reply</span><p class="ag-quote" style="margin-top:10px">“{esc(first)}”</p>'
+            f'<span class="ag-badge green">Recorded Nova Pro reply</span><p class="ag-quote" style="margin-top:10px">“{named}”</p>'
             f'<div class="ag-small" style="margin-top:8px">First sentence of a live reply: {esc(recorded["model_id"])}, request '
             f'{esc(recorded["request_id"])}, {esc(recorded["created_at"][:10])}. The full reply is in the live demo.</div>'
         )

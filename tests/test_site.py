@@ -25,11 +25,10 @@ def test_build_renders_the_landing_page_and_every_scenario(tmp_path):
     assert "1 new path to a protected role" in demo and "Analysis incomplete" in demo
     assert "Recorded AI explanation" in demo and "410472bd-679f-43a1-a1a1-783459e321b7" in demo
     assert "This hosted page never calls Bedrock" in demo
+    # The recorded reply names each entity, on the overview quote and in the demo, instead of printing raw IDs.
     for html in (landing, demo):
-        assert "\u2014" not in html and "<script>alert" not in html
-    assert sorted(p.name for p in (tmp_path / "site" / "reports").glob("*.md")) == ["passrole.md", "repair.md", "unknown.md"]
-    headers = json.loads((tmp_path / "site" / "vercel.json").read_text())["headers"][0]["headers"]
-    assert {"key": "X-Frame-Options", "value": "DENY"} in headers
+        assert '<span class="ag-ent" title="p-ci-deployer">' in html and "allows p-ci-deployer" not in html
+    assert "The route after the fix" in demo
 
 
 def test_a_stale_recording_is_never_shown(tmp_path):

@@ -7,10 +7,12 @@ places it: a keyed Streamlit container locally, a static card on Vercel.
 from __future__ import annotations
 
 from . import web
+from .analysis import PotentialFinding
 from .compare import Comparison, FindingDelta
 from .pipeline import PipelineResult
 from .simulate import FixCandidate, best_fix_for
 from .story import Story, build_story, expected_text, involves_pass_role, is_potential
+from .web import Segments
 
 STATUS_BADGES = {"added": "amber", "removed": "green", "unchanged": "gray", "inconclusive": "amber"}
 STATUS_WORDS = {"added": "New path", "removed": "Path closed", "unchanged": "Unchanged", "inconclusive": "Unresolved"}
@@ -105,23 +107,47 @@ def stats(result: PipelineResult, sim: FixCandidate | None = None) -> str:
     )
 
 
+def _change_intro(story: Story) -> str:
+    """One sentence on what the change did to this route, from the conditions that actually changed."""
+    delta, changes = story.delta, story.changes
+    if delta.status == "added":
+        if not changes:
+            return "The route itself did not change. The difference is elsewhere in the snapshots; see the evidence below."
+        return "The proposal flips these conditions." if len(changes) > 1 else (
+            "The proposal flips this condition. Nothing else on the route changed."
+        )
+    if delta.status == "removed":
+        return "The second snapshot flips this condition back."
+    if delta.status == "unchanged":
+        return "The route exists in both snapshots."
+    if delta.proposal_state == "reachable":
+        return "The proposal establishes this route, but the baseline leaves a condition unknown, so the engine cannot say whether it is new."
+    if delta.proposal is None:
+        return "The baseline leaves a condition on this route unknown, so the engine cannot say whether the change closed it."
+    to_unknown = sum(1 for c in changes if c.state == "unknown")
+    if to_unknown == len(changes) and changes:
+        which = "this condition" if to_unknown == 1 else "these conditions"
+        return f"The proposal makes {which} unknown, so the engine cannot decide."
+    if to_unknown:
+        flipped = len(changes) - to_unknown
+        return (
+            f"The proposal flips {'one condition' if flipped == 1 else f'{flipped} conditions'} and makes "
+            f"{'another' if to_unknown == 1 else f'{to_unknown} others'} unknown, so the engine cannot decide."
+        )
+    if changes:
+        return "The proposal flips this condition, but another condition on the route is unknown, so the engine cannot decide."
+    return "No condition on this route changed, but one is unknown, so the engine cannot decide."
+
+
 def change_card(comparison: Comparison, story: Story) -> str:
     delta = story.delta
     badge = f'<span class="ag-badge {STATUS_BADGES[delta.status]}">{web.esc(STATUS_WORDS[delta.status])}</span>'
-    other = len(comparison.fact_changes) - len(story.changes)
+    other = len(comparison.fact_changes) - sum(1 for c in story.changes if c.fact_id)
     extra = f'<p class="ag-note">{plural(other, "other fact")} also changed; see the evidence below.</p>' if other > 0 else ""
-    intro = {
-        "added": "The proposal flips this condition. Nothing else on the route changed.",
-        "removed": "The second snapshot flips this condition back.",
-        "unchanged": "The route exists in both snapshots.",
-        "inconclusive": "The proposal makes this condition unknown, so the engine cannot decide.",
-    }[delta.status]
-    if delta.status == "added" and len(story.changes) > 1:
-        intro = "The proposal flips these conditions."
     glossary = f"<div>{web.PASSROLE_GLOSSARY}</div>" if involves_pass_role(story) else ""
     return (
         web.card_head("difference", "The change", badge)
-        + f'<p class="ag-note">{web.esc(intro)}</p>'
+        + f'<p class="ag-note">{web.esc(_change_intro(story))}</p>'
         + f'<div class="ag-split"><div>{web.change_block(story)}{extra}</div>{glossary}</div>'
     )
 
@@ -132,8 +158,7 @@ def path_card(story: Story, sim: FixCandidate | None = None) -> str:
         "added": "The path it opens",
         "removed": "The path it closes",
         "unchanged": "A path in both snapshots",
-        "inconclusive": "A possible path, not established",
-    }[delta.status]
+    }.get(delta.status)
     mode = "simulated" if sim and sim.removes(delta.id) else "closed" if delta.status == "removed" else "live"
     target = "role" if delta.impact == "privileged_role_use" else "data"
     if mode == "simulated":
@@ -141,7 +166,16 @@ def path_card(story: Story, sim: FixCandidate | None = None) -> str:
         note = f"{sim.fact_id} is revoked on a copy of the proposal. The route no longer reaches the protected {target}."
     elif delta.status == "added":
         note = f"{story.headline}. Follow the arrows: each one is an established relationship."
+    elif delta.status == "inconclusive" and delta.proposal_state == "reachable":
+        title = "The path in the proposal"
+        note = f"{story.headline}. The baseline could not be resolved, so the engine cannot say whether this path is new."
+    elif delta.status == "inconclusive" and delta.proposal is None:
+        title = "A possible path in the baseline"
+        note = "In the baseline a dashed arrow depended on an unknown condition. " + (
+            "The proposal has no route to this target." if delta.proposal_state == "unreachable" else "The proposal no longer checks this route."
+        )
     elif delta.status == "inconclusive":
+        title = "A possible path, not established"
         note = "A dashed arrow depends on an unknown condition, so this is not a finding and not safe either."
     elif delta.status == "removed":
         note = f"{story.headline}. The red arrow is the relationship the second snapshot removes."
@@ -155,17 +189,40 @@ def path_card(story: Story, sim: FixCandidate | None = None) -> str:
             + ", ".join(f'<span class="ag-mono">{web.esc(i)}</span>' for i in ids)
             + " was false.</p>"
         )
-    return web.card_head("conversion_path", title) + f'<p class="ag-note">{web.esc(note)}</p>' + web.path(story, mode, key=True) + blocked
+    revoked = sim.fact_id if mode == "simulated" else None
+    return (
+        web.card_head("conversion_path", title)
+        + f'<p class="ag-note">{web.esc(note)}</p>'
+        + web.path(story, mode, key=True, revoked=revoked)
+        + blocked
+    )
+
+
+def _unknown_count(count: int, verb: str = "is") -> str:
+    were = "were" if verb == "was" else "are"
+    return f"one condition {verb} unknown" if count == 1 else f"{count} conditions {were} unknown"
 
 
 def conditions_card(story: Story) -> str:
+    delta = story.delta
     held = sum(1 for c in story.conditions if c.state == "true")
-    title, lead = {
-        "added": ("Why the route works", "A route only counts when every condition holds. The changed one was the missing piece."),
-        "unchanged": ("Why the route works", "A route only counts when every condition holds."),
-        "removed": ("What the route needed", "Every condition held in the first snapshot. The second one takes away the changed one."),
-        "inconclusive": ("What is unresolved", "One condition is unknown, so the engine will not call this route open or closed."),
-    }[story.delta.status]
+    unknown = sum(1 for c in story.conditions if c.state == "unknown")
+    if delta.status != "inconclusive":
+        title, lead = {
+            "added": ("Why the route works", "A route only counts when every condition holds. The changed one was the missing piece."),
+            "unchanged": ("Why the route works", "A route only counts when every condition holds."),
+            "removed": ("What the route needed", "Every condition held in the first snapshot. The second one takes away the changed one."),
+        }[delta.status]
+    elif delta.proposal_state == "reachable":
+        title = "Why the route works"
+        lead = "Every condition holds in the proposal. The baseline could not be resolved, so the engine cannot say whether the route is new."
+    elif delta.proposal is None:
+        title = "What was unresolved"
+        lead = f"In the baseline, {_unknown_count(unknown, 'was')}, so the engine cannot say whether the change closed this route."
+    else:
+        title = "What is unresolved"
+        count = _unknown_count(unknown)
+        lead = f"{count[0].upper()}{count[1:]}, so the engine will not call this route open or closed."
     return (
         web.card_head("checklist", title, f'<span class="ag-badge gray">{held} of {len(story.conditions)} hold</span>')
         + f'<p class="ag-note">{web.esc(lead)}</p>'
@@ -181,11 +238,25 @@ def ai_intro(model_id: str) -> str:
     )
 
 
+def ai_reply(summary: Segments, limitations: Segments, story: Story, badge: str, cached: bool = False) -> str:
+    """A validated model reply, with each placeholder shown as the name it stands for."""
+    note = '<span class="ag-badge gray">Cached: no new call</span>' if cached else ""
+    return (
+        f'<div class="ag-badges"><span class="ag-badge green">{web.esc(badge)}</span>{note}</div>'
+        f'<p class="ag-summary">{web.reply(summary, story.nodes)}</p>'
+        f'<p class="ag-note"><strong>Limitations:</strong> {web.reply(limitations, story.nodes)}</p>'
+    )
+
+
 def fix_blocker(result: PipelineResult, delta: FindingDelta) -> str | None:
     """A note explaining why no fix can be simulated, or None when one can."""
     if delta.proposal is None:
         return "This path only exists in the first snapshot, so there is nothing to fix."
     if is_potential(delta) or delta.status == "inconclusive":
+        record = delta.current if is_potential(delta) else delta.baseline
+        unknown = record.unresolved if isinstance(record, PotentialFinding) else ()
+        if any(p.origin == "derived" for _, p in unknown):
+            return "No fix can be verified while a condition is unknown. Resolve it in the snapshot, then compare again."
         return "No fix can be verified while a condition is unknown. Declare the fact as true or false, then compare again."
     if not result.fixes:
         reason = "The access already existed in the baseline." if delta.status == "unchanged" else "No newly enabled grant is on this route."
@@ -216,10 +287,17 @@ def expected_block(comparison: Comparison, sim: FixCandidate | None = None) -> s
     return '<p class="ag-label">Normal access the fix must keep</p>' + web.expected_list(rows)
 
 
-def fix_result(comparison: Comparison, delta: FindingDelta, sim: FixCandidate) -> str:
+def fix_result(comparison: Comparison, story: Story, sim: FixCandidate) -> str:
+    """Cause and effect in one view: the route with the revoked arrow cut, then the numbers."""
+    delta = story.delta
     kept = sum(1 for r in sim.expected_after if r.result == "pass")
     verified = sim.verified_for(delta.id)
-    return web.stats(
+    route = ""
+    if sim.removes(delta.id):
+        route = '<p class="ag-label">The route after the fix</p>' + web.path(
+            story, "simulated", compact=True, key=True, revoked=sim.fact_id
+        )
+    return f'<div class="ag-fix-result">{route}' + web.stats(
         [
             (
                 "High-risk paths",
@@ -241,4 +319,4 @@ def fix_result(comparison: Comparison, delta: FindingDelta, sim: FixCandidate) -
         if verified
         else '<p class="ag-note"><span class="ag-badge amber">Not verified</span> The finding remains, or coverage became '
         "incomplete after the change.</p>"
-    )
+    ) + "</div>"

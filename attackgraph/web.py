@@ -9,13 +9,15 @@ from __future__ import annotations
 
 import html
 
-from .story import KIND_NAMES, Condition, Story
+from .story import KIND_NAMES, Condition, PathNode, Story
 
 ICONS = {"principal": "person", "role": "badge", "lambda": "deployed_code", "s3_object": "description"}
 PROTECTED_ICONS = {"privileged_role": "admin_panel_settings", "sensitive_object": "lock"}
 STATE_ICONS = {"true": "check_circle", "false": "cancel", "unknown": "help"}
 RESULT_ICONS = {"pass": "check_circle", "fail": "cancel", "inconclusive": "help"}
 LANDING, DEMO = "/", "/demo"
+
+Segments = tuple[tuple[str, str], ...]  # ("text" | "node" | "id", value), as the explanation parser returns them
 
 
 def esc(value: object) -> str:
@@ -217,6 +219,13 @@ CSS = """
 .ag-cond-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
 .ag-step-title { font-size: 15px; font-weight: 600; margin: 18px 0 2px; color: var(--ag-text); }
 .ag-summary { color: var(--ag-body); font-size: 16px; line-height: 1.65; margin: 8px 0 0; }
+.ag-ent { display: inline-block; max-width: 100%; padding: 0 5px 0 4px; border-radius: 5px; background: var(--ag-accent-soft);
+  color: var(--ag-text); font-weight: 500; line-height: 1.45; overflow-wrap: anywhere; }
+.ag-ent .ag-icon { font-size: 14px; color: var(--ag-accent); margin-right: 2px; vertical-align: -2px; }
+.ag-ent.protected { background: var(--ag-amber-soft); }
+.ag-ent.protected .ag-icon { color: var(--ag-amber-text); }
+.ag-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.ag-fix-result { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--ag-line-2); }
 .ag-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; margin-top: 14px; }
 .ag-split.lead { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
 .ag-split > :only-child { grid-column: 1 / -1; }
@@ -336,13 +345,17 @@ KEY_TEXT = {
 CUT_TEXT = {"simulated": "Revoked by the simulated fix", "closed": "Removed in the second snapshot"}
 
 
-def path(story: Story, mode: str = "live", compact: bool = False, key: bool = False) -> str:
+def path(story: Story, mode: str = "live", compact: bool = False, key: bool = False, revoked: str | None = None) -> str:
     """The route as node cards joined by labelled arrows.
 
-    mode "live" marks changed hops as new and dashes unresolved ones;
-    "simulated" and "closed" mark changed hops as revoked or removed and fade
-    everything after the cut. key adds a legend for the line styles drawn.
+    mode "live" marks changed hops as new (as changed while the comparison is
+    unresolved) and dashes unresolved ones, badging the hop whose own
+    condition is unknown; "simulated" and "closed" mark the cut hop as revoked
+    or removed and fade everything after it. revoked names the fact a
+    simulated fix revokes, so only its hop is cut. key adds a legend for the
+    line styles drawn.
     """
+    unresolved = story.delta.status == "inconclusive"
     parts = []
     used = set()
     cut = False
@@ -352,14 +365,14 @@ def path(story: Story, mode: str = "live", compact: bool = False, key: bool = Fa
             cls, tag = "", ""
             if cut:
                 cls = "faded"
-            elif mode == "simulated" and hop.changed:
+            elif mode == "simulated" and hop.changed and (revoked is None or revoked in hop.fact_ids):
                 cls, tag, cut = "cut", ("red", "Revoked"), True
             elif mode == "closed" and hop.changed:
                 cls, tag, cut = "cut", ("red", "Removed"), True
             elif hop.state == "unknown":
-                cls, tag = "maybe", ("amber", "Unknown") if hop.changed else ""
+                cls, tag = "maybe", ("amber", "Unknown") if hop.unknown else ""
             elif hop.changed:
-                cls, tag = "new", ("new", "New")
+                cls, tag = "new", ("new", "Changed" if unresolved else "New")
             elif hop.state != "true":
                 cls = "maybe"
             used.add(cls)
@@ -384,13 +397,34 @@ def path(story: Story, mode: str = "live", compact: bool = False, key: bool = Fa
     label = "Route: " + " then ".join(esc(n.label) for n in story.nodes)
     out = f'<div class="ag-path{" compact" if compact else ""}" role="img" aria-label="{label}">' + "".join(parts) + "</div>"
     if key:
-        items = [
-            f'<span><span class="ag-key-line {c}"></span>{esc(CUT_TEXT.get(mode, KEY_TEXT[c]) if c == "cut" else KEY_TEXT[c])}</span>'
-            for c in KEY_TEXT
-            if c in used
-        ]
+        text = dict(KEY_TEXT, cut=CUT_TEXT.get(mode, KEY_TEXT["cut"]))
+        if unresolved:
+            text["new"] = "Changed in the proposal"
+        items = [f'<span><span class="ag-key-line {c}"></span>{esc(text[c])}</span>' for c in KEY_TEXT if c in used]
         out += '<div class="ag-key" aria-hidden="true">' + "".join(items) + "</div>"
     return out
+
+
+def reply(segments: Segments, nodes: tuple[PathNode, ...]) -> str:
+    """Model text with each entity placeholder shown by the name it stands for.
+
+    Names are uploaded display text, so they are escaped and drawn as chips: a
+    label can never pass for the model's own words. Facts, checks and fixes
+    keep their IDs in monospace, as everywhere else on the page.
+    """
+    names = {node.id: node for node in nodes}
+    out = []
+    for kind, value in segments:
+        node = names.get(value) if kind == "node" else None
+        if node is not None:
+            glyph = PROTECTED_ICONS[node.protected] if node.protected else ICONS[node.kind]
+            cls = "ag-ent protected" if node.protected else "ag-ent"
+            out.append(f'<span class="{cls}" title="{esc(node.id)}">{icon(glyph)}{esc(node.label)}</span>')
+        elif kind == "text":
+            out.append(esc(value))
+        else:
+            out.append(f'<span class="ag-mono">{esc(value)}</span>')
+    return "".join(out)
 
 
 def condition_item(condition: Condition) -> str:
@@ -428,16 +462,20 @@ def conditions(story: Story, two: bool = False) -> str:
 
 def change_block(story: Story) -> str:
     if not story.changes:
-        return '<p class="ag-note">No fact on this route changed between the snapshots.</p>'
+        return '<p class="ag-note">No condition on this route changed between the snapshots.</p>'
     blocks = []
     for change in story.changes:
         before, after = change.change.split(" → ")
+        pointer = f'<span class="ag-mono">{esc(change.pointers[0])}</span>' if change.pointers else ""
+        if change.fact_id:
+            where = f'Fact <span class="ag-mono">{esc(change.fact_id)}</span> at {pointer or "-"}'
+        else:  # a derived check, such as the policy controls, or a fact one snapshot does not declare
+            where = f"Declared at {pointer}" if pointer else "Not declared in this snapshot"
         blocks.append(
             f'<div class="ag-change"><div class="ag-change-text">{esc(change.text)}</div>'
             f'<div class="ag-flip"><span class="from">{esc(before)}</span>{icon("arrow_forward")}'
             f'<span class="to">{esc(after)}</span></div>'
-            f'<div class="ag-small" style="margin-top:6px">Fact <span class="ag-mono">{esc(change.fact_id)}</span> at '
-            f'<span class="ag-mono">{esc(change.pointers[0] if change.pointers else "-")}</span></div></div>'
+            f'<div class="ag-small" style="margin-top:6px">{where}</div></div>'
         )
     return "".join(blocks)
 

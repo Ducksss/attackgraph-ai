@@ -8,17 +8,20 @@ import pytest
 from botocore.exceptions import ClientError, NoCredentialsError
 from helpers import ADMIN_FINDING, FIXTURES, baseline_doc, proposed_doc, read_doc, to_snapshot
 
+from attackgraph import web
 from attackgraph.compare import compare_snapshots
 from attackgraph.explain import (
     SYSTEM_PROMPT,
     BedrockExplainer,
     build_packet,
     is_current,
+    stored_segments,
     template_summary,
     user_prompt,
 )
-from attackgraph.render import md_escape, md_segments
+from attackgraph.render import md_escape, plain_segments
 from attackgraph.simulate import fix_candidates
+from attackgraph.story import build_story
 
 VALID = {
     "finding_id": "A1",
@@ -71,15 +74,43 @@ def explainer(client, **kwargs):
     return BedrockExplainer("test-model", "ap-southeast-1", client=client, **kwargs)
 
 
-def test_valid_reply_is_translated_back_to_real_ids(demo):
+def test_valid_reply_is_translated_back_to_real_ids_and_shown_by_name(demo):
     comparison, _, packet = demo
     result = explainer(FakeClient()).explain(packet)
     assert result.ok and result.request_id == "req-123" and result.input_tokens == 1200
-    rendered = md_segments(result.summary)
-    assert "`f-ci-pass-deploy-admin`" in rendered and "`r-deploy-admin`" in rendered
+    assert ("node", "r-deploy-admin") in result.summary and ("id", "f-ci-pass-deploy-admin") in result.summary
     assert result.evidence_ids == ("f-ci-pass-deploy-admin", "same-account check")
     assert result.cited_fix == "revoke/f-ci-pass-deploy-admin"
     assert is_current(result, comparison.analysis_id)
+    rendered = web.reply(result.summary, build_story(comparison, comparison.delta(ADMIN_FINDING)).nodes)
+    assert 'title="p-ci-deployer">' in rendered and "CI deploy user (build pipeline)</span>" in rendered
+    assert 'class="ag-ent protected" title="r-deploy-admin"' in rendered  # the protected role is marked as such
+    assert '<span class="ag-mono">f-ci-pass-deploy-admin</span>' in rendered  # facts keep their IDs
+    assert "P1" not in rendered and "R1" not in rendered
+
+
+def test_reply_names_are_escaped_and_set_apart_from_the_prose():
+    injected = read_doc("examples/label-injection.json")
+    comparison = compare_snapshots(to_snapshot(baseline_doc()), to_snapshot(injected))
+    delta = comparison.delta(ADMIN_FINDING)
+    result = explainer(FakeClient()).explain(build_packet(comparison, delta, fix_candidates(comparison)))
+    rendered = web.reply(result.summary, build_story(comparison, delta).nodes)
+    assert "<script>" not in rendered and "&lt;script&gt;alert(1)&lt;/script&gt;" in rendered
+    # The injected sentence appears only inside its entity chip, never as loose prose.
+    label = next(n["label"] for n in injected["nodes"] if n["id"] == "r-deploy-admin")
+    chip = f'<span class="ag-ent protected" title="r-deploy-admin">{web.icon("admin_panel_settings")}{web.esc(label)}</span>'
+    assert chip in rendered and rendered.count(web.esc(label)) == rendered.count(chip)
+
+
+def test_stored_reply_restores_the_segments_the_live_app_shows(demo):
+    _, _, packet = demo
+    result = explainer(FakeClient()).explain(packet)
+    assert stored_segments(plain_segments(result.summary), packet) == result.summary
+    recorded = json.loads((FIXTURES.parent / "docs" / "evidence" / "recorded-explanation.json").read_text())
+    segments = stored_segments(recorded["summary"], packet)
+    assert ("id", "revoke/f-ci-pass-deploy-admin") in segments  # the fix ID is not split at the fact ID inside it
+    assert ("node", "p-ci-deployer") in segments and ("node", "l-build-hook") in segments
+    assert plain_segments(segments) == recorded["summary"]
 
 
 @pytest.mark.parametrize(

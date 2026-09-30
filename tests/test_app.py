@@ -87,13 +87,14 @@ def test_deep_link_opens_a_scenario(hidden_credentials):
     assert "Analysis incomplete" in html(start("unknown"))
 
 
-def test_bedrock_explanation_is_labelled_and_translated(app):
+def test_bedrock_explanation_is_labelled_and_shows_names(app):
     model_id, region = configured_model()
     app.session_state["explainer"] = BedrockExplainer(model_id, region, client=FakeClient())
     click(app, "Explain with Amazon Bedrock")
-    markdown = texts(app.markdown).replace("\\", "")  # compare the rendered text, not the Markdown escapes
-    assert "AI explanation" in markdown and "f-ci-pass-deploy-admin" in markdown
-    assert "<dt>Request</dt><dd>req-123</dd>" in html(app)
+    page = html(app)
+    assert '<span class="ag-badge green">AI explanation</span>' in page
+    assert 'title="r-deploy-admin">' in page and '<span class="ag-mono">f-ci-pass-deploy-admin</span>' in page
+    assert "<dt>Request</dt><dd>req-123</dd>" in page
 
 
 def test_bedrock_failure_keeps_results_and_shows_the_deterministic_summary(app):
@@ -108,6 +109,8 @@ def test_simulated_fix_closes_the_path_and_reset_restores_it(app):
     page = html(app)
     assert "Verified in this model" in page and ">Revoked</span>" in page
     assert "after simulated fix 0" in page and "1 → 0" in page
+    fix_card = page.split('<div class="ag-fix-result">', 1)[1]
+    assert "The route after the fix" in fix_card and ">Revoked</span>" in fix_card  # cause and effect in one view
     click(app, "Reset simulation")
     assert ">Revoked</span>" not in html(app)
 

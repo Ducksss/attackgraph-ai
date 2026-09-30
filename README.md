@@ -106,7 +106,7 @@ Sends the demo finding through the real pipeline ten times (chargeable, each cal
 3. **Open the live demo**. The flagship scenario is already computed: "1 new path to a protected role", high-risk paths 0 to 1, coverage complete.
 4. **The path it opens**: CI deploy user, then the post-build hook function, then the deployment admin role. The amber arrow is the one new permission. **The change** shows the fact that flipped and its JSON pointer, and explains `iam:PassRole` in one paragraph. **Why the route works** lists all 7 conditions and marks the changed one.
 5. **What this means**: press **Explain with Amazon Bedrock** in the local app, or read the recorded Nova Pro reply on the hosted page. Match each claim to the conditions card.
-6. **Simulate the fix**. The arrow turns red and dashed, high-risk paths go from 1 to 0, normal access stays at 2 of 2, and the card says "Verified in this model".
+6. **Simulate the fix**. The fix card redraws the route with the revoked arrow red and dashed, high-risk paths go from 1 to 0, normal access stays at 2 of 2, and the card says "Verified in this model", all in one view.
 7. Close on **Trust and limits** on the overview: synthetic data only. The prototype verifies this explicit model; wider AWS policy coverage is future work.
 
 The other scenarios show a comparison that closes the path, an unknown fact that makes the result incomplete rather than safe, and field-level validation errors.
@@ -184,7 +184,7 @@ Complete candidates rank by fewest failing expected-access checks, then most fin
 - The reply must be exactly `{finding_id, summary, evidence_ids, fix_candidate_id, limitations}`. Every cited ID and every alias in the prose must exist in the packet, and length limits apply. Anything else is discarded.
 - Refusals, timeouts, credential errors and rejected replies show "AI explanation unavailable" with the reason, above the deterministic template summary. Engine results never change.
 - Successful replies are cached per analysis, finding, fix, model and prompt version, and a cached reply is labelled. A reply produced for different inputs is never shown.
-- Model text is escaped before rendering. Identifier checks cannot prove that the prose is true, so review generated claims against the evidence.
+- Model text is escaped before rendering. Each alias in a reply is shown as the name it stands for, in a tag set apart from the prose, so an uploaded label can never read as the model's own words; facts, checks and fixes keep their IDs. Identifier checks cannot prove that the prose is true, so review generated claims against the evidence.
 
 ## Acceptance criteria
 
