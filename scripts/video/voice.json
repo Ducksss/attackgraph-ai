@@ -1,0 +1,17 @@
+{
+  "_note": "What the voice-over says (make.mjs --voice). Each caption in captions.json is read with these substitutions, applied in order, so that it sounds right aloud; make.mjs warns about any digits left in a line. The title and end lines are spoken `at` seconds into the title and end cards.",
+  "say": [
+    ["AttackGraph AI", "AttackGraph A-I"],
+    ["iam:PassRole", "I-A-M PassRole"],
+    ["CI deploy user", "C-I deploy user"],
+    ["line 27", "line twenty-seven"],
+    ["0 to 1", "zero to one"],
+    ["1 to 0", "one to zero"],
+    ["all 7 conditions", "all seven conditions"],
+    ["7 of 7", "seven of seven"],
+    ["2 of 2", "two of two"],
+    ["30 September", "the thirtieth of September"]
+  ],
+  "title": { "at": 0.3, "text": "AttackGraph A-I. See what a permission change unlocks, before you deploy it." },
+  "end": { "at": 0.4, "text": "Try it at attackgraph dash A-I dot vercel dot app. Built with Amazon Bedrock and Amazon Nova Pro." }
+}

@@ -3,6 +3,8 @@
 Final cut: `attackgraph-ai-demo.mp4`, 2:28.6 (148.6 s), 1920x1080, 30 fps, H.264 + silent AAC. Captions are burned in and also in `attackgraph-ai-demo.srt`.
 Assembled 2026-09-30T10:33:59.270Z.
 
+**The submitted cut is the voiced one,** `attackgraph-ai-demo-voice.mp4` ([YouTube](https://youtu.be/dAE6y8M9iQI)): this picture with an AI voice-over by ElevenLabs in the voice Chris, and "AI voice-over by ElevenLabs" added to the end card's credit line. It speaks 30 lines and 1,942 characters: the 28 captions, a title line at 0:00.3 and an end line at 2:21.0. Each line was trimmed of silence and sped up only to fit before the next one, at a tempo of at most 1.12×. A line that still ran long pushed the next one later; the largest drift is about 1 s, on "Verified in this model, not promised for a real account." (on screen at 2:02.6, spoken from 2:03.6). `node scripts/video/make.mjs --voice` rebuilds it; see [The voice-over](../../scripts/video/README.md#the-voice-over).
+
 | Shot | Time | Source | On screen | Captions (start time and text) | Hosted overview |
 |---|---|---|---|---|---|
 | 0 (title) | 0:00.0–0:04.0 | Card | Logo, name and one-line description | (no caption; the card's own text) |  |
@@ -17,7 +19,7 @@ Assembled 2026-09-30T10:33:59.270Z.
 | 9 | 2:07.1–2:20.6 | Hosted: https://attackgraph-ai.vercel.app/ | Trust and limits: the six chips; FAQ 'Can it block a pull request?' and 'What is out of scope?' opened | 2:07.1 "The limits are up front: synthetic data only, nothing deployed or executed."<br>2:12.8 "Two explicit rules, not all of AWS."<br>2:17.2 "An unknown is never reported as safe." | yes |
 | 10 (end card) | 2:20.6–2:28.6 | Card | Links, technologies, synthetic data only, visual style credit | (no caption; the card's own text) |  |
 
-**From the hosted site's overview:** shot 3 (hosted-hero) and shot 9 (hosted-trust). These are the shots to re-shoot after the overview is redeployed: `node scripts/make.mjs 3 9`.
+**From the hosted site's overview:** shot 3 (hosted-hero) and shot 9 (hosted-trust). These are the shots to re-shoot after the overview is redeployed: `node scripts/video/make.mjs 3 9`.
 
 ## Notes on the submitted cut
 

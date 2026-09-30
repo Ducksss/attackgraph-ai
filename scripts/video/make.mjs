@@ -9,17 +9,21 @@
 //   node scripts/video/make.mjs 7 --live       re-shoot 7 with one live Bedrock press (budget: 3 presses in total)
 //   node scripts/video/make.mjs 7 --recorded   shot 7 from the hosted demo's recorded AI reply instead
 //   node scripts/video/make.mjs 7 --dry        rehearse shot 7 without pressing the button (writes clips/dry-07.mp4 only)
+//   node scripts/video/make.mjs --voice        also make attackgraph-ai-demo-voice.mp4, voiced by ElevenLabs: paid API
+//                                              calls, with the key in ELEVENLABS_API_KEY (see README.md)
+//   node scripts/video/make.mjs --voice-dry    rehearse the voice-over with tones: no key, no API calls
 //   --out DIR                                  write everything under DIR instead of build/video/
 //   --no-assemble                              shoot only;  --cards  re-render the title and end cards
 //
 // Shots 4 to 8 need the local app (APP_URL, default http://127.0.0.1:8599); see README.md.
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { findChrome, launchBrowser, REPO_ROOT, SCRIPT_DIR, sleep } from "./cdp.mjs";
-import { CAPTIONS, DSF, FFMPEG, FPS, minSeconds, OUT_H, OUT_W, Recorder, VH, VW, wordCount } from "./recorder.mjs";
+import { CAPTIONS, DSF, FFMPEG, FFPROBE, FPS, minSeconds, OUT_H, OUT_W, Recorder, VH, VW, wordCount } from "./recorder.mjs";
 import { PRESS_BUDGET, pressCount, SHOTS } from "./shots.mjs";
+import { MAX_TEMPO, MODEL, narrate, voiceLines } from "./voice.mjs";
 
 function fail(message) {
   console.error(`make.mjs: ${message}`);
@@ -31,7 +35,7 @@ function fail(message) {
 const [nodeMajor] = process.versions.node.split(".").map(Number);
 if (nodeMajor < 22 || typeof WebSocket !== "function") fail(`Node 22 or later is needed for its built-in WebSocket (this is ${process.version}).`);
 
-const KNOWN_FLAGS = new Set(["live", "recorded", "dry", "no-assemble", "cards"]);
+const KNOWN_FLAGS = new Set(["live", "recorded", "dry", "no-assemble", "cards", "voice", "voice-dry"]);
 const args = process.argv.slice(2);
 const flags = new Set();
 const requested = [];
@@ -56,17 +60,29 @@ const OUTPUT = join(OUT, "attackgraph-ai-demo.mp4");
 const SRT = join(OUT, "attackgraph-ai-demo.srt");
 const CARD_TEMPLATES = join(SCRIPT_DIR, "cards"); // HTML only; they read the mark from docs/brand/
 const ORDER = ["title", 1, 2, 3, 4, 5, 6, 7, 8, 9, "end"];
-const CARD_SECONDS = { title: 4.0, end: 8.0 };
+// end-voice is the voiced cut's end card: cards/end.html with the voice-over credit shown.
+const CARD_SECONDS = { title: 4.0, end: 8.0, "end-voice": 8.0 };
 const CARD_TARGETS = { 0: "title", title: "title", 10: "end", end: "end" };
 const STRIP_H = 240; // caption strips are 1920 x 240, laid over the bottom of the frame
 const pad2 = (n) => String(n).padStart(2, "0");
-const FFPROBE = process.env.FFPROBE || (process.env.FFMPEG && /[\\/]/.test(FFMPEG) ? join(dirname(FFMPEG), "ffprobe") : "ffprobe");
 
 // "all" is every shot except 7, whose live take needs --live; it can sit beside other targets ("all 7 --recorded").
 const targets = [...new Set(requested.flatMap((t) => (t === "all" ? Object.keys(SHOTS).filter((k) => k !== "7" && k !== "7r") : [t])))];
 const cardTargets = targets.filter((t) => t in CARD_TARGETS).map((t) => CARD_TARGETS[t]);
 const shotTargets = targets.filter((t) => !(t in CARD_TARGETS));
 for (const t of shotTargets) if (!SHOTS[t]) fail(`no shot ${t}: shots are 1 to 9, 0 and 10 are the title and end cards, or all`);
+
+const ASSEMBLE = !flags.has("no-assemble") && !(flags.has("dry") && targets.length);
+const VOICING = flags.has("voice") || flags.has("voice-dry");
+const VOICE_DRY = flags.has("voice-dry");
+const VOICE_DIR = join(OUT, VOICE_DRY ? "voice-dry" : "voice");
+const VOICE_OUTPUT = join(OUT, VOICE_DRY ? "attackgraph-ai-demo-voice-dry.mp4" : "attackgraph-ai-demo-voice.mp4");
+if (flags.has("voice") && VOICE_DRY) fail("pass --voice or --voice-dry, not both");
+if (VOICING && !ASSEMBLE) fail("the voice-over goes under an assembled cut: drop --no-assemble, or --dry");
+// Checked before anything is shot or assembled. The key is only ever read from the environment (voice.mjs).
+if (flags.has("voice") && !process.env.ELEVENLABS_API_KEY) {
+  fail("--voice needs an ElevenLabs API key in ELEVENLABS_API_KEY; --voice-dry rehearses the voice-over with tones and makes no API calls.");
+}
 
 function checkTools() {
   try {
@@ -186,7 +202,13 @@ async function renderCards(names) {
   try {
     const page = await browser.newPage({ width: OUT_W, height: OUT_H, scale: 1 });
     for (const name of names) {
-      await page.goto(fileUrl(join(CARD_TEMPLATES, `${name}.html`)));
+      const [template, variant] = name.split("-"); // end-voice: end.html, with class "voice" on <html>
+      await page.goto(fileUrl(join(CARD_TEMPLATES, `${template}.html`)));
+      if (variant) {
+        const shown = await page.evaluate(`(() => { document.documentElement.classList.add(${JSON.stringify(variant)});
+          return [...document.querySelectorAll(${JSON.stringify(`.${variant}-credit`)})].some((e) => getComputedStyle(e).display !== 'none'); })()`);
+        if (!shown) throw new Error(`${name} card: ${template}.html shows no .${variant}-credit`);
+      }
       await page.evaluate("document.fonts.ready.then(() => true)");
       await page.waitFor("[...document.images].every((i) => i.complete && i.naturalWidth > 0)", { timeout: 10000, label: `${name} card: the mark from docs/brand/mark.svg did not load` });
       await sleep(300);
@@ -240,7 +262,8 @@ function checkCaptions(items) {
   return warnings;
 }
 
-function assemble(items, total) {
+// The silent cut; with audio, a cut with that track (the voice-over's narration) copied in as its sound.
+function assemble(items, total, { output = OUTPUT, audio = null, graph = "filtergraph.txt" } = {}) {
   const inputs = [];
   const filters = [];
   const labels = [];
@@ -263,14 +286,36 @@ function assemble(items, total) {
     labels.push(`[${cur}]`);
   }
   filters.push(`${labels.join("")}concat=n=${labels.length}:v=1:a=0,format=yuv420p[vout]`);
-  const script = join(LOGS, "filtergraph.txt");
+  const script = join(LOGS, graph);
   mkdirSync(LOGS, { recursive: true });
   writeFileSync(script, filters.join(";\n"));
-  run(FFMPEG, ["-hide_banner", "-loglevel", "error", "-stats", "-y", ...inputs,
-    "-f", "lavfi", "-t", total.toFixed(3), "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+  const sound = audio ? ["-i", audio] : ["-f", "lavfi", "-t", total.toFixed(3), "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"];
+  run(FFMPEG, ["-hide_banner", "-loglevel", "error", "-stats", "-y", ...inputs, ...sound,
     "-filter_complex_script", script, "-map", "[vout]", "-map", `${n}:a`,
     "-c:v", "libx264", "-preset", "slow", "-crf", "18", "-profile:v", "high", "-pix_fmt", "yuv420p", "-r", String(FPS),
-    "-c:a", "aac", "-b:a", "96k", "-shortest", "-movflags", "+faststart", OUTPUT]);
+    ...(audio ? ["-c:a", "copy"] : ["-c:a", "aac", "-b:a", "96k"]), "-shortest", "-movflags", "+faststart", output]);
+}
+
+// The voiced cut: the same picture with the voice-over under it and its credit on the end card.
+async function voiceCut(items, total) {
+  const v = await narrate(voiceLines(items), total, { dir: VOICE_DIR, dry: VOICE_DRY });
+  const voiced = items.map((it) => (it.key === "end" ? { ...it, file: join(CLIPS, "end-voice.mp4") } : it));
+  assemble(voiced, total, { output: VOICE_OUTPUT, audio: v.file, graph: "filtergraph-voice.txt" });
+  const file = VOICE_OUTPUT.slice(OUT.length + 1);
+  const chars = v.chars.toLocaleString("en-US");
+  const title = v.lines.find((l) => l.id === "title");
+  const end = v.lines.find((l) => l.id === "end");
+  const note = v.dry
+    ? `\n## Voice-over rehearsal\n\n\`${file}\` rehearses the voice-over with a tone for each of its ${v.lines.length} lines (${chars} characters), so its timing is only indicative. \`--voice\` makes the voiced cut.\n`
+    : `\n## Voice-over\n\n\`${file}\` is this cut with an AI voice-over by ElevenLabs (voice \`${v.voiceId}\`, ${MODEL}) and "AI voice-over by ElevenLabs" added to the end card's credit line. ` +
+      `It speaks ${v.lines.length} lines, ${chars} characters: the ${v.lines.length - 2} captions, a title line at ${fmt(title.start)} and an end line at ${fmt(end.start)}. ` +
+      `Each line is trimmed of silence and sped up only to fit before the next one, at most ${MAX_TEMPO}x (the fastest line here: ${v.maxTempo.toFixed(2)}x); ` +
+      `the largest drift behind its caption is ${v.drift.drift.toFixed(2)} s, on "${v.drift.caption ?? v.drift.text}". What was said, and when, is in \`${VOICE_DIR.slice(OUT.length + 1)}/plan.json\`.\n`;
+  appendFileSync(join(OUT, "shots.md"), note);
+  const size = statSync(VOICE_OUTPUT).size / 1e6;
+  const source = v.dry ? "tones" : `${v.requested} requested from ElevenLabs, ${v.cached} from the cache`;
+  console.log(`\n${VOICE_OUTPUT}\n${fmt(total)} (${total.toFixed(2)} s), ${size.toFixed(1)} MB, voice-over of ${v.lines.length} lines and ${chars} characters (${source}), ` +
+    `tempo at most ${v.maxTempo.toFixed(2)}x, largest drift ${v.drift.drift.toFixed(2)} s (${v.drift.id})`);
 }
 
 function writeSrt(items) {
@@ -376,10 +421,15 @@ try {
   console.log(`output: ${OUT}`);
   for (const key of shotTargets) await shoot(key);
   const cards = new Set(flags.has("cards") ? ["title", "end"] : cardTargets);
+  if (VOICING && cards.has("end")) cards.add("end-voice"); // the voiced end card is made along with end.mp4
   if (cards.size) await renderCards([...cards]);
-  if (!flags.has("no-assemble") && !(flags.has("dry") && targets.length)) {
+  if (ASSEMBLE) {
     mkdirSync(CLIPS, { recursive: true });
-    const missing = ["title", "end"].filter((name) => !existsSync(join(CLIPS, `${name}.mp4`)));
+    const clip = (name) => join(CLIPS, `${name}.mp4`);
+    const missing = ["title", "end"].filter((name) => !existsSync(clip(name)));
+    if (VOICING && (missing.includes("end") || !existsSync(clip("end-voice")) || statSync(clip("end-voice")).mtimeMs < statSync(clip("end")).mtimeMs)) {
+      missing.push("end-voice");
+    }
     if (missing.length) await renderCards(missing);
     const { items, total } = loadTimeline();
     const ids = [...new Set(items.flatMap((it) => it.cues.map((c) => c.id)))];
@@ -394,6 +444,7 @@ try {
     const size = statSync(OUTPUT).size / 1e6;
     console.log(`\n${OUTPUT}\n${fmt(total)} (${total.toFixed(2)} s), ${size.toFixed(1)} MB, ${items.reduce((a, it) => a + it.cues.length, 0)} captions`);
     if (total < 140 || total > 170) console.log(`length warning: ${total.toFixed(1)} s is outside 2:20-2:50`);
+    if (VOICING) await voiceCut(items, total);
   }
 } catch (e) {
   // A shot or tool failure: say what failed without a stack trace (set DEBUG=1 for one).

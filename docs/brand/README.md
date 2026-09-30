@@ -78,3 +78,5 @@ The mark is hand-written SVG. Every PNG here, in [`../devpost/`](../devpost/) an
 ```
 
 It needs Node 22 or newer, Google Chrome (set `CHROME` if it isn't found) and a network connection for the Google Fonts. Text is baked into the images, so after changing the site's wording, the recorded reply or the UI, re-render rather than editing a PNG. Only files that changed visibly are replaced; the anti-aliasing noise between two renders is ignored.
+
+A failed run replaces nothing. Before each capture, the generator checks that the page's stylesheets and images loaded and that the fonts above are registered and loaded, so a Google Fonts outage stops it instead of baking fallback text into the images. A page gets 60 seconds, and the error names the page and what failed.

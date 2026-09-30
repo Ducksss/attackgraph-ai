@@ -4,7 +4,7 @@
 // paused and stepped to the frame's time, so a re-shoot gives the same motion.
 import { spawn } from "node:child_process";
 import { readFileSync, renameSync, writeFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { SCRIPT_DIR, sleep } from "./cdp.mjs";
 
 export const FPS = 30;
@@ -15,6 +15,7 @@ export const OUT_W = 1920;
 export const OUT_H = 1080;
 export const CAPTIONS = JSON.parse(readFileSync(join(SCRIPT_DIR, "captions.json"), "utf8"));
 export const FFMPEG = process.env.FFMPEG || "ffmpeg"; // from PATH unless FFMPEG names the binary
+export const FFPROBE = process.env.FFPROBE || (process.env.FFMPEG && /[\\/]/.test(FFMPEG) ? join(dirname(FFMPEG), "ffprobe") : "ffprobe");
 
 export const wordCount = (text) => text.trim().split(/\s+/).length;
 // Rules: every caption on screen for at least 2.5 s and at no more than 3 words per second.

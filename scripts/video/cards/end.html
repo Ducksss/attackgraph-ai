@@ -25,6 +25,9 @@
   .chip { display: inline-flex; align-items: center; gap: 12px; font-size: 27px; font-weight: 500; padding: 11px 24px; border-radius: 999px; border: 1.5px solid rgba(255, 255, 255, 0.22); color: #e8e8ee; }
   .chip i { width: 12px; height: 12px; border-radius: 50%; background: var(--green-line); display: inline-block; }
   .credit { position: absolute; left: 0; right: 0; bottom: 64px; font-size: 24px; color: #8d8d9c; text-align: center; }
+  /* The voiced cut's end card (make.mjs --voice) sets class "voice" on <html>, which shows the voice-over credit. */
+  .voice-credit { display: none; }
+  .voice .voice-credit { display: inline; }
 </style>
 </head>
 <body>
@@ -41,6 +44,6 @@
     <p class="built">Built with <b>Amazon Bedrock (Amazon Nova Pro)</b>, Python, Streamlit, NetworkX, GitHub Actions, Vercel</p>
     <div class="meta"><span class="chip"><i></i>Synthetic data only</span></div>
   </div>
-  <div class="credit">Visual style after the Close Webflow template</div>
+  <div class="credit">Visual style after the Close Webflow template<span class="voice-credit"> · AI voice-over by ElevenLabs</span></div>
 </body>
 </html>

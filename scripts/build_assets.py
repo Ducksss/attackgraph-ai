@@ -11,6 +11,11 @@ A file is replaced only when it changed visibly. Fresh renders differ from the
 committed ones by anti-aliasing noise, so a pixel counts as changed only when
 one of its channels moves by more than NOISE levels.
 
+A failed render replaces nothing. shoot.mjs stops when a page overruns its
+deadline, a stylesheet, font or image fails to load, or one of FONTS is not
+registered or did not load, because the capture would show fallback text and
+count as a visible change. The whole run also has a time limit.
+
 Usage:
     python scripts/build_site.py && python scripts/build_assets.py
     python scripts/build_assets.py --force    # replace every file
@@ -19,10 +24,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import functools
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -35,6 +42,10 @@ SITE = ROOT / "site"
 SHOOT = ROOT / "scripts" / "assets" / "shoot.mjs"
 NOISE = 24  # the largest per-channel difference that is still anti-aliasing noise
 MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+# The faces the pages use, from docs/brand/README.md. shoot.mjs checks that each is registered and loaded.
+FONTS = [["Inter", w] for w in (400, 500, 600, 700)] + [["JetBrains Mono", w] for w in (400, 500)] + [["Material Symbols Rounded", 400]]
+JOB_SECONDS = 60  # shoot.mjs's deadline for one page, from opening it to writing its PNG
+RUN_SECONDS = 40  # on top of the pages' deadlines: starting Chrome and shutting it down
 
 # Marks the bordered card that holds a visible h3 with exactly this text, so it can be cropped.
 TAG = """window.__tag = (text, tag) => {
@@ -334,10 +345,45 @@ def node() -> str:
     return path
 
 
+class RenderError(RuntimeError):
+    """The renderer failed, overran or left out a file; nothing it wrote may replace a committed one."""
+
+
+def run(cmd: list[str], timeout: float, env: dict[str, str] | None = None) -> None:
+    """Run cmd in a process group of its own and kill the whole group, Chrome included, if it fails or overruns."""
+    proc = subprocess.Popen(cmd, env=env, start_new_session=True)
+    try:
+        status = proc.wait(timeout=timeout)
+    except BaseException as exc:  # the timeout, or Ctrl-C, which no longer reaches the group
+        kill_group(proc)
+        if isinstance(exc, subprocess.TimeoutExpired):
+            raise RenderError(f"it did not finish within {timeout:.0f} s") from None
+        raise
+    if status:
+        kill_group(proc)
+        raise RenderError(f"it exited with status {status}")
+
+
+def kill_group(proc: subprocess.Popen) -> None:
+    if hasattr(os, "killpg"):
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(proc.pid, signal.SIGKILL)
+    else:
+        proc.kill()
+    proc.wait()
+
+
 def render(jobs: list[dict], work: Path, name: str) -> None:
+    """Render the jobs with shoot.mjs, or raise RenderError: every job must write its file."""
     path = work / f"{name}.json"
-    path.write_text(json.dumps(jobs), encoding="utf-8")
-    subprocess.run([node(), str(SHOOT), str(path)], check=True, env={**os.environ, "CHROME": chrome()})
+    path.write_text(json.dumps([{"fonts": FONTS, "timeout": JOB_SECONDS * 1000, **job} for job in jobs]), encoding="utf-8")
+    try:
+        run([node(), str(SHOOT), str(path)], RUN_SECONDS + JOB_SECONDS * len(jobs), {**os.environ, "CHROME": chrome()})
+    except RenderError as exc:
+        raise RenderError(f"Rendering the {name} failed: {exc}") from None
+    missing = [Path(job["out"]).name for job in jobs if not Path(job["out"]).is_file()]
+    if missing:
+        raise RenderError(f"Rendering the {name} failed: no {', '.join(missing)}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -347,8 +393,12 @@ def main(argv: list[str] | None = None) -> int:
     with tempfile.TemporaryDirectory(prefix="attackgraph-assets-") as tmp:
         work = Path(tmp)
         shots, out = work / "shots", work / "out"
-        render(shot_jobs(shots), work, "shots")
-        render(asset_jobs(work / "pages", shots, out), work, "assets")
+        try:
+            render(shot_jobs(shots), work, "shots")
+            render(asset_jobs(work / "pages", shots, out), work, "assets")
+        except RenderError as exc:
+            print(f"{exc}. No file was replaced.", file=sys.stderr)
+            return 1
         outputs = {path: ROOT / path.relative_to(out) for path in out.rglob("*") if path.is_file()}
         outputs.update({shots / f"{name}.png": ROOT / "docs" / "images" / file for name, file in README_SHOTS.items()})
         replaced = []
