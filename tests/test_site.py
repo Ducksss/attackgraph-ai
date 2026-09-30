@@ -25,6 +25,16 @@ def test_build_renders_the_landing_page_and_every_scenario(tmp_path):
     assert "1 new path to a protected role" in demo and "Analysis incomplete" in demo
     assert "Recorded AI explanation" in demo and "410472bd-679f-43a1-a1a1-783459e321b7" in demo
     assert "This hosted page never calls Bedrock" in demo
+    # The recorded reply names each entity, on the overview quote and in the demo, instead of printing raw IDs.
+    for html in (landing, demo):
+        assert '<span class="ag-ent" title="p-ci-deployer">' in html and "allows p-ci-deployer" not in html
+    assert "The route after the fix" in demo
+    # The flagship opens with the pull request: the failing check, and the passing one after the fix commit.
+    flagship = demo.split('id="sc-passrole"', 1)[1].split('id="sc-repair"', 1)[0]
+    assert flagship.index("The pull request") < flagship.index("Inside the check") < flagship.index("1 new path to a protected role")
+    assert "Check failed" in flagship and "Check passed" in flagship and "Apply the suggested fix" in flagship
+    assert "The pull request" not in demo.split('id="sc-repair"', 1)[1]
+    assert "Can it block a pull request?" in landing and "CI blocking" not in landing
     for html in (landing, demo):
         assert "\u2014" not in html and "<script>alert" not in html
     assert sorted(p.name for p in (tmp_path / "site" / "reports").glob("*.md")) == ["passrole.md", "repair.md", "unknown.md"]

@@ -30,7 +30,8 @@ sys.path.insert(0, str(ROOT))
 
 from attackgraph import ENGINE_VERSION, MODEL_VERSION, landing, page, web  # noqa: E402
 from attackgraph.analysis import Finding  # noqa: E402
-from attackgraph.explain import DEFAULT_MODEL_ID, build_packet  # noqa: E402
+from attackgraph.explain import DEFAULT_MODEL_ID, build_packet, stored_segments  # noqa: E402
+from attackgraph.pullrequest import PullRequest, demo_pull_request  # noqa: E402
 from attackgraph.render import step_text  # noqa: E402
 from attackgraph.report import build_report  # noqa: E402
 from attackgraph.scenarios import SCENARIO_LABELS, SCENARIOS, UPLOAD, run_scenario  # noqa: E402
@@ -123,7 +124,7 @@ SCRIPT = """
 
 FAVICON = (
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' "
-    "rx='7' fill='%2353db78'/%3E%3Cpath d='M9 10h9a4 4 0 0 1 0 8h-4a4 4 0 0 0 0 8h9' fill='none' stroke='%23032b0c' "
+    "rx='7' fill='%236366f1'/%3E%3Cpath d='M9 10h9a4 4 0 0 1 0 8h-4a4 4 0 0 0 0 8h9' fill='none' stroke='%23ffffff' "
     "stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E"
 )
 
@@ -150,10 +151,11 @@ def ai_card(result, delta, story, recorded: dict | None) -> str:
     fix = next((f for f in result.fixes if f.removes(delta.id)), None)
     plain = " ".join(summary(story, fix))
     if recorded:
-        text = (
-            badge("green", "Recorded AI explanation")
-            + f'<p class="ag-summary">{esc(recorded["summary"])}</p>'
-            f'<p class="ag-note"><strong>Limitations:</strong> {esc(recorded["limitations"])}</p>'
+        text = page.ai_reply(
+            stored_segments(recorded["summary"], packet),
+            stored_segments(recorded["limitations"], packet),
+            story,
+            "Recorded AI explanation",
         )
         side = (
             web.meta_list(
@@ -198,10 +200,11 @@ def fix_card(result, delta, story) -> str:
         '<button type="button" class="ag-btn ag-btn-ghost ag-sim-on" data-action="reset">Reset simulation</button>'
         "</div>"
     )
-    left = page.fix_intro(chosen, best, story) + buttons + f'<div class="ag-sim-on">{page.fix_result(comparison, delta, chosen)}</div>'
+    left = page.fix_intro(chosen, best, story) + buttons
     before, after = page.expected_block(comparison), page.expected_block(comparison, chosen)
     right = f'<div><div class="ag-sim-off">{before}</div><div class="ag-sim-on">{after}</div></div>' if before else ""
-    return head + f'<div class="ag-split"><div>{left}</div>{right}</div>'
+    result_html = f'<div class="ag-sim-on">{page.fix_result(comparison, story, chosen)}</div>'
+    return head + f'<div class="ag-split"><div>{left}</div>{right}</div>' + result_html
 
 
 def condition_rows(candidate, comparison) -> str:
@@ -286,13 +289,27 @@ def evidence(result, delta, key: str) -> str:
     )
 
 
-def scenario_panel(key: str, result, recorded: dict | None) -> str:
+def pull_request_card(pr: PullRequest) -> str:
+    """The pull request before and after the fix commit; the fix buttons switch the whole scenario."""
+    if pr.fix is None:
+        return f'<div class="ag-scard">{page.pull_request(pr)}</div>'
+    apply = f'<button type="button" class="ag-btn ag-btn-primary" data-action="simulate">{web.icon("healing")}Apply the suggested fix</button>'
+    undo = '<button type="button" class="ag-btn ag-btn-ghost" data-action="reset">Undo the fix</button>'
+    return (
+        '<div class="ag-scard">'
+        f'<div class="ag-sim-off">{page.pull_request(pr)}<div class="ag-actions">{apply}</div></div>'
+        f'<div class="ag-sim-on">{page.pull_request(pr, fixed=True)}<div class="ag-actions">{undo}</div></div>'
+        "</div>"
+    )
+
+
+def scenario_panel(key: str, result, recorded: dict | None, pr: PullRequest | None = None) -> str:
     if not result.ok:
         body = page.invalid(result)
     else:
         comparison = result.comparison
         delta = comparison.deltas[0] if comparison.deltas else None
-        body = page.verdict(result)
+        body = (pull_request_card(pr) + page.inside_check() if pr is not None else "") + page.verdict(result)
         if delta is None:
             body += page.stats(result) + evidence(result, None, key)
         else:
@@ -373,7 +390,9 @@ def build(out: Path, recorded_path: Path = RECORDED) -> Path:
         f'aria-selected="{"true" if key == "passrole" else "false"}" tabindex="{0 if key == "passrole" else -1}">{esc(label)}</button>'
         for key, label in SCENARIO_LABELS.items()
     )
-    panels = "".join(scenario_panel(key, results[key], recorded) for key in SCENARIOS) + upload_panel()
+    pr = demo_pull_request(results["passrole"])
+    panels = "".join(scenario_panel(key, results[key], recorded, pr if key == "passrole" else None) for key in SCENARIOS)
+    panels += upload_panel()
     built = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     note = (
         f'<p class="ag-hosted-note">Static build of the bundled scenarios, generated {built} (UTC) by engine '

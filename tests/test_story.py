@@ -5,7 +5,7 @@ from pathlib import Path
 
 from helpers import ADMIN_FINDING, PASSROLE_FACT, baseline_doc, proposed_doc, read_doc, set_state, to_snapshot
 
-from attackgraph import web
+from attackgraph import page, web
 from attackgraph.compare import compare_snapshots
 from attackgraph.simulate import best_fix_for, fix_candidates
 from attackgraph.story import build_story, summary
@@ -57,6 +57,46 @@ def test_unknown_hops_are_dashed_not_new():
     story = build_story(comparison, comparison.delta(ADMIN_FINDING))
     rendered = web.path(story)
     assert ">Unknown</span>" in rendered and ">New</span>" not in rendered and 'class="ag-hop maybe"' in rendered
+
+
+def test_established_route_with_an_unresolved_baseline_is_stated_not_questioned():
+    # The proposal reaches the admin role outright; only whether that is new is unknown.
+    comparison = compare_snapshots(to_snapshot(read_doc("examples/unknown-prerequisite.json")), to_snapshot(proposed_doc()))
+    delta = comparison.delta(ADMIN_FINDING)
+    assert delta.status == "inconclusive" and delta.proposal_state == "reachable"
+    story = build_story(comparison, delta)
+    assert story.headline == "CI deploy user (build pipeline) can run code as Deployment admin role in the proposal"
+    text = " ".join(summary(story))
+    assert "(unknown to true)" in text and "cannot say whether the route is new" in text and "unknown is unknown" not in text
+    conditions = page.conditions_card(story)
+    assert "7 of 7 hold" in conditions and "One condition is unknown" not in conditions
+    assert "makes this condition unknown" not in page.change_card(comparison, story)
+    path = web.path(story, key=True)
+    assert 'class="ag-hop maybe"' not in path and ">Changed</span>" in path and ">New</span>" not in path
+
+
+def test_unknown_policy_control_is_named_instead_of_the_changed_fact():
+    comparison = compare_snapshots(to_snapshot(baseline_doc()), to_snapshot(read_doc("examples/unresolved-policy-control.json")))
+    story = build_story(comparison, comparison.delta(ADMIN_FINDING))
+    text = " ".join(summary(story))
+    assert "The snapshot marks service control policies as unresolved, so they could block this route." in text
+    assert "(false to true)" in text and "apply is unknown" not in text
+    card = page.change_card(comparison, story)
+    assert "flips one condition and makes another unknown" in card
+    assert "/coverage/policy_controls/service_control_policies" in card  # the policy change is shown as a change
+    # The Unknown badge sits on the hop whose own condition is unknown, not on the changed PassRole hop.
+    path = web.path(story)
+    assert '<span class="ag-badge amber ag-hop-badge">Unknown</span><div class="ag-hop-text">runs as</div>' in path
+
+
+def test_simulated_fix_cuts_only_the_revoked_hop():
+    base = set_state(baseline_doc(), "f-deploy-admin-trusts-lambda", "false")
+    comparison = compare_snapshots(to_snapshot(base), to_snapshot(proposed_doc()))
+    story = build_story(comparison, comparison.delta(ADMIN_FINDING))
+    assert [h.changed for h in story.hops] == [True, True]  # PassRole and the trust policy both changed
+    path = web.path(story, "simulated", revoked="f-deploy-admin-trusts-lambda")
+    assert '<span class="ag-badge new ag-hop-badge">New</span><div class="ag-hop-text">can pass' in path
+    assert '<span class="ag-badge red ag-hop-badge">Revoked</span><div class="ag-hop-text">runs as</div>' in path
 
 
 def test_labels_are_escaped_in_every_fragment():

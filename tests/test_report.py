@@ -10,6 +10,7 @@ from attackgraph.explain import BedrockExplainer, build_packet
 from attackgraph.render import step_text, witness_dot
 from attackgraph.report import build_report
 from attackgraph.simulate import best_fix_for, fix_candidates
+from attackgraph.story import build_story
 
 
 def demo():
@@ -70,21 +71,22 @@ def test_incomplete_report_never_claims_safety():
     assert "(provisional)" in report
 
 
-def test_graph_edges_match_the_text_path():
+def test_graph_draws_the_same_stops_as_the_path_card():
     comparison, _ = demo()
-    witness = comparison.proposal.findings[ADMIN_FINDING].witness
-    dot = witness_dot(comparison.proposal, witness, comparison.changed_fact_ids)
+    story = build_story(comparison, comparison.delta(ADMIN_FINDING))
+    dot = witness_dot(story)
     edges = re.findall(r'^"([^"]+)" -> "([^"]+)"', dot, flags=re.M)
-    assert edges == [(c.subject, c.target) for c in witness]
-    for candidate in witness:
-        assert candidate.subject in step_text(candidate) and candidate.target in step_text(candidate)
-    assert "CHANGED: f-ci-pass-deploy-admin" in dot
+    assert edges == [("p-ci-deployer", "l-build-hook"), ("l-build-hook", "r-deploy-admin")]
+    assert edges == [(a.id, b.id) for a, b in zip(story.nodes, story.nodes[1:])]
+    for candidate in comparison.proposal.findings[ADMIN_FINDING].witness:
+        assert candidate.subject in step_text(candidate) and candidate.via in step_text(candidate)
+    assert "1. Rule B" in dot and "CHANGED: f-ci-pass-deploy-admin" in dot
+    assert "#0b2414" not in dot and "#53db78" not in dot  # the light theme, not the old dark one
 
 
 def test_graph_escapes_quotes_in_labels():
     doc = proposed_doc()
     doc["nodes"][0]["label"] = 'CI "deploy" user \\N'
     comparison = compare_snapshots(to_snapshot(baseline_doc()), to_snapshot(doc))
-    witness = comparison.proposal.findings[ADMIN_FINDING].witness
-    dot = witness_dot(comparison.proposal, witness)
+    dot = witness_dot(build_story(comparison, comparison.delta(ADMIN_FINDING)))
     assert 'CI \\"deploy\\" user \\\\N' in dot

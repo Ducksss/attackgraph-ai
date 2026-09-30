@@ -10,7 +10,7 @@ import json
 
 import streamlit as st
 
-from attackgraph import ENGINE_VERSION, MODEL_VERSION, landing, page, web
+from attackgraph import ENGINE_VERSION, MODEL_VERSION, landing, page, pullrequest, web
 from attackgraph.analysis import RULE_TITLES, Finding
 from attackgraph.explain import (
     PROMPT_VERSION,
@@ -22,7 +22,7 @@ from attackgraph.explain import (
     is_current,
 )
 from attackgraph.pipeline import PipelineResult, run
-from attackgraph.render import md_escape, md_segments, step_text, witness_dot
+from attackgraph.render import md_escape, step_text, witness_dot
 from attackgraph.report import build_report
 from attackgraph.scenarios import SCENARIO_LABELS, UPLOAD, run_scenario
 from attackgraph.simulate import best_fix_for
@@ -93,6 +93,34 @@ def start_simulation(analysis_id: str, fix_id: str) -> None:
 
 def stop_simulation() -> None:
     st.session_state.simulation = None
+
+
+@st.cache_resource(show_spinner="Running the pull-request check...")
+def demo_pull_request() -> pullrequest.PullRequest | None:
+    return pullrequest.demo_pull_request(run_scenario("passrole"))
+
+
+def pull_request_card(result: PipelineResult, sim) -> None:
+    """The flagship change as a pull request, with the repository's check run on it before and after the fix."""
+    pr = demo_pull_request()
+    if pr is None:
+        return
+    fixed = sim is not None and pr.fix is not None and sim.fact_id == pr.fix.fact_id
+    fix = next((f for f in result.fixes if pr.fix is not None and f.fact_id == pr.fix.fact_id), None)
+    with st.container(key="agcard-pr"):
+        st.html(page.pull_request(pr, fixed))
+        if fixed:
+            st.button("Undo the fix", on_click=stop_simulation, key="pr-undo")
+        elif fix is not None:
+            st.button(
+                "Apply the suggested fix",
+                type="primary",
+                icon=":material/healing:",
+                on_click=start_simulation,
+                args=(result.comparison.analysis_id, fix.id),
+                key="pr-apply",
+            )
+    st.html(page.inside_check())
 
 
 def upload_panel() -> None:
@@ -172,10 +200,7 @@ def ai_card(result: PipelineResult, delta, story) -> None:
                 st.markdown(":gray-badge[Deterministic summary, not AI-generated]")
                 st.html(plain)
             elif stored.ok:
-                cached = " :gray-badge[cached: no new call]" if stored.cached else ""
-                st.markdown(f":green-badge[AI explanation]{cached}")
-                st.markdown(md_segments(stored.summary))
-                st.markdown(f":small[**Limitations:** {md_segments(stored.limitations)}]")
+                st.html(page.ai_reply(stored.summary, stored.limitations, story, "AI explanation", cached=stored.cached))
             else:
                 reason = "" if stored.status == "unavailable" else f" ({REASONS.get(stored.status, stored.status)})"
                 st.warning(f"**AI explanation unavailable**{reason}. {md_escape(stored.error)}", icon=":material/cloud_off:")
@@ -236,10 +261,11 @@ def fix_card(result: PipelineResult, delta, story) -> None:
             )
             if sim is not None:
                 buttons.button("Reset simulation", on_click=stop_simulation, key=f"reset-sim-{delta.id}")
-                st.html(page.fix_result(comparison, delta, sim))
         if right is not None:
             with right:
                 st.html(expected)
+        if sim is not None:
+            st.html(page.fix_result(comparison, story, sim))
 
 
 def prerequisite_table(candidate, comparison) -> str:
@@ -270,7 +296,7 @@ def coverage_row(label: str, analysis) -> str:
     return f"| {label} | {badge} | {rules[0]} | {rules[1]} | {policy} | {md_escape(mechanisms)} |"
 
 
-def evidence_section(result: PipelineResult, delta) -> None:
+def evidence_section(result: PipelineResult, delta, story) -> None:
     comparison = result.comparison
     sim = active_simulation(result)
     with st.expander("Evidence for reviewers: every condition, pointer and check"):
@@ -337,12 +363,12 @@ def evidence_section(result: PipelineResult, delta) -> None:
             st.markdown("\n".join(lines) or "The proposal declares no expected-access checks.")
             st.caption("Ordinary access a fix should preserve. It is never reported as a high-risk finding.")
         with tabs[4]:
-            if delta is not None:
-                record = delta.current
-                witness = record.witness if isinstance(record, Finding) else record.possible_witness
-                source = comparison.proposal if delta.proposal is not None else comparison.baseline
-                st.graphviz_chart(witness_dot(source, witness, comparison.changed_fact_ids), width="content")
-            st.caption("Rule B is one composite edge in the engine; the diagram above draws the Lambda function as a stop for readability.")
+            if story is not None:
+                st.graphviz_chart(witness_dot(story), width="content")
+            st.caption(
+                "Rule B is one relationship in the engine: every condition must hold together. Like the path above, "
+                "the graph draws its Lambda function as a stop."
+            )
         with tabs[5]:
             explanations = tuple(r for (aid, _), r in st.session_state.explanations.items() if aid == comparison.analysis_id)
             report = build_report(comparison, result.fixes, sim, explanations)
@@ -386,9 +412,12 @@ def demo_section() -> None:
         st.html(page.invalid(result))
         return
     sim = active_simulation(result)
+    if st.session_state.loaded == ("scenario", "passrole"):
+        pull_request_card(result, sim)
     st.html(page.verdict(result) + page.stats(result, sim))
     comparison = result.comparison
     delta = choose_finding(comparison)
+    story = None
     if delta is not None:
         story = build_story(comparison, delta)
         for key, card in (
@@ -400,7 +429,7 @@ def demo_section() -> None:
                 st.html(card)
         ai_card(result, delta, story)
         fix_card(result, delta, story)
-    evidence_section(result, delta)
+    evidence_section(result, delta, story)
     st.button("Start over", on_click=reset_app, help="Clears uploads, simulations and cached explanations.")
 
 

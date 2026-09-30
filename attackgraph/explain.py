@@ -66,7 +66,7 @@ class EvidencePacket:
     finding_id: str
     fix_candidate_id: str | None
     payload: dict
-    display: dict[str, tuple[str, str]]  # alias -> (kind, display text)
+    display: dict[str, tuple[str, str]]  # alias -> ("text" | "node" | "id", value)
     evidence_aliases: frozenset[str]
     fix_aliases: frozenset[str]
 
@@ -103,7 +103,7 @@ def build_packet(comparison: Comparison, delta: FindingDelta, fixes: tuple[FixCa
     node_alias = _node_aliases([(n, snapshot.nodes[n].kind) for n in ordered_nodes])
 
     display: dict[str, tuple[str, str]] = {"A1": ("text", "this finding")}
-    display.update({alias: ("id", node_id) for node_id, alias in node_alias.items()})
+    display.update({alias: ("node", node_id) for node_id, alias in node_alias.items()})
     fact_alias: dict[str, str] = {}
     derived_alias: dict[str, str] = {}
 
@@ -273,7 +273,7 @@ class ExplanationResult:
     region: str
     created_at: str
     prompt_version: str = PROMPT_VERSION
-    summary: tuple[tuple[str, str], ...] = ()  # segments: ("text"|"id", value)
+    summary: tuple[tuple[str, str], ...] = ()  # segments: ("text" | "node" | "id", value)
     limitations: tuple[tuple[str, str], ...] = ()
     evidence_ids: tuple[str, ...] = ()
     cited_fix: str | None = None
@@ -303,6 +303,29 @@ def _segments(text: str, packet: EvidencePacket) -> tuple[tuple[str, str], ...]:
         if match.start() > last:
             out.append(("text", text[last : match.start()]))
         out.append(packet.display[alias])
+        last = match.end()
+    if last < len(text):
+        out.append(("text", text[last:]))
+    return tuple(out)
+
+
+def stored_segments(text: str, packet: EvidencePacket) -> tuple[tuple[str, str], ...]:
+    """Segments for a reply stored with real identifiers, such as the recorded one.
+
+    Storing a reply replaced each alias with its identifier, so matching the
+    identifiers of the packet it was produced from restores the segments the
+    live app shows. The caller guarantees the packet matches the reply.
+    """
+    kinds = {value: kind for kind, value in packet.display.values() if kind != "text"}
+    if not kinds:
+        return (("text", text),) if text else ()
+    names = "|".join(re.escape(value) for value in sorted(kinds, key=len, reverse=True))
+    out: list[tuple[str, str]] = []
+    last = 0
+    for match in re.finditer(rf"(?<![a-z0-9._/-])(?:{names})(?![a-z0-9_/-]|\.[a-z0-9])", text):
+        if match.start() > last:
+            out.append(("text", text[last : match.start()]))
+        out.append((kinds[match.group(0)], match.group(0)))
         last = match.end()
     if last < len(text):
         out.append(("text", text[last:]))

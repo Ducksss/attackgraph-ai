@@ -7,15 +7,19 @@ and messages come from uploaded files.
 
 from __future__ import annotations
 
+import difflib
 import html
+import re
 
-from .story import KIND_NAMES, Condition, Story
+from .story import KIND_NAMES, Condition, PathNode, Story
 
 ICONS = {"principal": "person", "role": "badge", "lambda": "deployed_code", "s3_object": "description"}
 PROTECTED_ICONS = {"privileged_role": "admin_panel_settings", "sensitive_object": "lock"}
 STATE_ICONS = {"true": "check_circle", "false": "cancel", "unknown": "help"}
 RESULT_ICONS = {"pass": "check_circle", "fail": "cancel", "inconclusive": "help"}
 LANDING, DEMO = "/", "/demo"
+
+Segments = tuple[tuple[str, str], ...]  # ("text" | "node" | "id", value), as the explanation parser returns them
 
 
 def esc(value: object) -> str:
@@ -217,6 +221,55 @@ CSS = """
 .ag-cond-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
 .ag-step-title { font-size: 15px; font-weight: 600; margin: 18px 0 2px; color: var(--ag-text); }
 .ag-summary { color: var(--ag-body); font-size: 16px; line-height: 1.65; margin: 8px 0 0; }
+.ag-ent { display: inline-block; max-width: 100%; padding: 0 5px 0 4px; border-radius: 5px; background: var(--ag-accent-soft);
+  color: var(--ag-text); font-weight: 500; line-height: 1.45; overflow-wrap: anywhere; }
+.ag-ent .ag-icon { font-size: 14px; color: var(--ag-accent); margin-right: 2px; vertical-align: -2px; }
+.ag-ent.protected { background: var(--ag-amber-soft); }
+.ag-ent.protected .ag-icon { color: var(--ag-amber-text); }
+.ag-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.ag-fix-result { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--ag-line-2); }
+
+.ag-inside { margin: 36px 0 4px; }
+.ag-inside .ag-note { margin-top: 8px; }
+.ag-pr { border: 1px solid var(--ag-line); border-radius: 12px; overflow: hidden; margin-top: 14px; background: var(--ag-surface); }
+.ag-pr-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; padding: 12px 16px;
+  background: var(--ag-surface-2); border-bottom: 1px solid var(--ag-line); }
+.ag-pr-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: var(--ag-text); }
+.ag-pr-title .ag-icon { color: var(--ag-accent); font-size: 20px; }
+.ag-pr-meta { color: var(--ag-muted); font-size: 13px; }
+.ag-diff-file { padding: 8px 16px; font-family: var(--ag-mono); font-size: 12.5px; color: var(--ag-body); border-bottom: 1px solid var(--ag-line-2); }
+.ag-diff { font-family: var(--ag-mono); font-size: 12.5px; line-height: 1.6; padding: 4px 0; }
+.ag-dl { display: grid; grid-template-columns: 48px 20px minmax(0, 1fr); color: var(--ag-body); }
+.ag-dl .n { text-align: right; padding-right: 10px; color: var(--ag-soft); user-select: none; }
+.ag-dl .s { color: var(--ag-soft); user-select: none; }
+.ag-dl code { font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 16px 0 0; background: none; color: inherit; }
+.ag-dl.del { background: #fff5f5; }
+.ag-dl.del .s { color: var(--ag-red); }
+.ag-dl.add { background: #f0fdf4; }
+.ag-dl.add .s { color: var(--ag-green); }
+.ag-dl mark { color: inherit; border-radius: 3px; padding: 0 1px; }
+.ag-dl.del mark { background: #fecaca; }
+.ag-dl.add mark { background: #bbf7d0; }
+.ag-annot { margin: 6px 16px 10px 68px; padding: 10px 14px; border: 1px solid var(--ag-red-line); border-left: 4px solid var(--ag-red);
+  border-radius: 8px; background: var(--ag-surface); font-family: "Inter", system-ui, -apple-system, sans-serif; }
+.ag-annot-title { display: flex; align-items: flex-start; gap: 6px; font-weight: 600; font-size: 14px; line-height: 1.45; color: var(--ag-red-text); }
+.ag-annot-title .ag-icon { font-size: 18px; flex: none; margin-top: 1px; }
+.ag-annot-src { font-weight: 400; color: var(--ag-soft); font-size: 12.5px; margin-left: 4px; }
+.ag-annot p { margin: 4px 0 0; color: var(--ag-body); font-size: 14px; line-height: 1.55; }
+.ag-annot.notice { border-color: var(--ag-accent-line); border-left-color: var(--ag-accent); }
+.ag-annot.notice .ag-annot-title { color: var(--ag-accent-strong); }
+.ag-annot.warning { border-color: var(--ag-amber-line); border-left-color: var(--ag-amber); }
+.ag-annot.warning .ag-annot-title { color: var(--ag-amber-text); }
+.ag-pr-check { display: flex; gap: 10px; align-items: flex-start; padding: 12px 16px; border-top: 1px solid var(--ag-line); background: var(--ag-surface-2); }
+.ag-pr-check > .ag-icon { font-size: 22px; margin-top: 1px; }
+.ag-pr-check.fail > .ag-icon { color: var(--ag-red); }
+.ag-pr-check.pass > .ag-icon { color: var(--ag-green); }
+.ag-pr-check .ag-note { margin: 2px 0 0; }
+.ag-log { margin-top: 6px; }
+.ag-log summary { cursor: pointer; color: var(--ag-accent-strong); font-size: 13.5px; width: fit-content; }
+.ag-log summary:focus-visible { outline: 2px solid var(--ag-accent); outline-offset: 2px; }
+.ag-log pre { margin: 8px 0 0; padding: 10px 12px; border: 1px solid var(--ag-line); border-radius: 8px; background: var(--ag-surface);
+  font-family: var(--ag-mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ag-body); }
 .ag-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; margin-top: 14px; }
 .ag-split.lead { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
 .ag-split > :only-child { grid-column: 1 / -1; }
@@ -270,6 +323,9 @@ CSS = """
   .ag-split, .ag-split.lead, .ag-conds.two { grid-template-columns: minmax(0, 1fr); gap: 16px; }
 }
 @media (max-width: 640px) {
+  .ag-dl { grid-template-columns: 34px 14px minmax(0, 1fr); }
+  .ag-dl .n { padding-right: 6px; }
+  .ag-annot { margin-left: 12px; margin-right: 12px; }
   .ag-nav { padding: 8px 8px 8px 12px; }
   .ag-brand { font-size: 15px; }
   .ag-nav .ag-btn { padding: 8px 12px; font-size: 14px; }
@@ -336,13 +392,17 @@ KEY_TEXT = {
 CUT_TEXT = {"simulated": "Revoked by the simulated fix", "closed": "Removed in the second snapshot"}
 
 
-def path(story: Story, mode: str = "live", compact: bool = False, key: bool = False) -> str:
+def path(story: Story, mode: str = "live", compact: bool = False, key: bool = False, revoked: str | None = None) -> str:
     """The route as node cards joined by labelled arrows.
 
-    mode "live" marks changed hops as new and dashes unresolved ones;
-    "simulated" and "closed" mark changed hops as revoked or removed and fade
-    everything after the cut. key adds a legend for the line styles drawn.
+    mode "live" marks changed hops as new (as changed while the comparison is
+    unresolved) and dashes unresolved ones, badging the hop whose own
+    condition is unknown; "simulated" and "closed" mark the cut hop as revoked
+    or removed and fade everything after it. revoked names the fact a
+    simulated fix revokes, so only its hop is cut. key adds a legend for the
+    line styles drawn.
     """
+    unresolved = story.delta.status == "inconclusive"
     parts = []
     used = set()
     cut = False
@@ -352,14 +412,14 @@ def path(story: Story, mode: str = "live", compact: bool = False, key: bool = Fa
             cls, tag = "", ""
             if cut:
                 cls = "faded"
-            elif mode == "simulated" and hop.changed:
+            elif mode == "simulated" and hop.changed and (revoked is None or revoked in hop.fact_ids):
                 cls, tag, cut = "cut", ("red", "Revoked"), True
             elif mode == "closed" and hop.changed:
                 cls, tag, cut = "cut", ("red", "Removed"), True
             elif hop.state == "unknown":
-                cls, tag = "maybe", ("amber", "Unknown") if hop.changed else ""
+                cls, tag = "maybe", ("amber", "Unknown") if hop.unknown else ""
             elif hop.changed:
-                cls, tag = "new", ("new", "New")
+                cls, tag = "new", ("new", "Changed" if unresolved else "New")
             elif hop.state != "true":
                 cls = "maybe"
             used.add(cls)
@@ -384,13 +444,87 @@ def path(story: Story, mode: str = "live", compact: bool = False, key: bool = Fa
     label = "Route: " + " then ".join(esc(n.label) for n in story.nodes)
     out = f'<div class="ag-path{" compact" if compact else ""}" role="img" aria-label="{label}">' + "".join(parts) + "</div>"
     if key:
-        items = [
-            f'<span><span class="ag-key-line {c}"></span>{esc(CUT_TEXT.get(mode, KEY_TEXT[c]) if c == "cut" else KEY_TEXT[c])}</span>'
-            for c in KEY_TEXT
-            if c in used
-        ]
+        text = dict(KEY_TEXT, cut=CUT_TEXT.get(mode, KEY_TEXT["cut"]))
+        if unresolved:
+            text["new"] = "Changed in the proposal"
+        items = [f'<span><span class="ag-key-line {c}"></span>{esc(text[c])}</span>' for c in KEY_TEXT if c in used]
         out += '<div class="ag-key" aria-hidden="true">' + "".join(items) + "</div>"
     return out
+
+
+def reply(segments: Segments, nodes: tuple[PathNode, ...]) -> str:
+    """Model text with each entity placeholder shown by the name it stands for.
+
+    Names are uploaded display text, so they are escaped and drawn as chips: a
+    label can never pass for the model's own words. Facts, checks and fixes
+    keep their IDs in monospace, as everywhere else on the page.
+    """
+    names = {node.id: node for node in nodes}
+    out = []
+    for kind, value in segments:
+        node = names.get(value) if kind == "node" else None
+        if node is not None:
+            glyph = PROTECTED_ICONS[node.protected] if node.protected else ICONS[node.kind]
+            cls = "ag-ent protected" if node.protected else "ag-ent"
+            out.append(f'<span class="{cls}" title="{esc(node.id)}">{icon(glyph)}{esc(node.label)}</span>')
+        elif kind == "text":
+            out.append(esc(value))
+        else:
+            out.append(f'<span class="ag-mono">{esc(value)}</span>')
+    return "".join(out)
+
+
+_TOKENS = re.compile(r"\w+|\s+|[^\w\s]")
+
+
+def _marked(text: str, other: str) -> str:
+    """text with the words that differ from other marked, so a flipped value stands out in its line."""
+    mine, theirs = _TOKENS.findall(text), _TOKENS.findall(other)
+    out = []
+    for tag, i1, i2, _, _ in difflib.SequenceMatcher(None, mine, theirs, autojunk=False).get_opcodes():
+        part = esc("".join(mine[i1:i2]))
+        out.append(part if tag == "equal" or not part else f"<mark>{part}</mark>")
+    return "".join(out)
+
+
+def diff(before: str, after: str, notes: dict[int, str] | None = None, context: int = 1) -> str:
+    """A unified diff of two texts, numbered by line, with changed words marked.
+
+    notes maps a line number in the new text to HTML placed right under that
+    line, the way a code review shows a check's annotation.
+    """
+    notes = notes or {}
+    old, new = before.splitlines(), after.splitlines()
+
+    def row(kind: str, number: int, sign: str, code: str) -> str:
+        line = f'<div class="ag-dl {kind}"><span class="n">{number}</span><span class="s">{sign}</span><code>{code}</code></div>'
+        return line + (notes.get(number, "") if kind != "del" else "")
+
+    rows = []
+    for group in difflib.SequenceMatcher(None, old, new, autojunk=False).get_grouped_opcodes(context):
+        for tag, i1, i2, j1, j2 in group:
+            if tag == "equal":
+                rows += [row("ctx", j1 + k + 1, " ", esc(new[j1 + k])) for k in range(j2 - j1)]
+                continue
+            paired = tag == "replace" and i2 - i1 == j2 - j1
+            rows += [
+                row("del", i1 + k + 1, "-", _marked(old[i1 + k], new[j1 + k]) if paired else esc(old[i1 + k]))
+                for k in range(i2 - i1)
+            ]
+            rows += [
+                row("add", j1 + k + 1, "+", _marked(new[j1 + k], old[i1 + k]) if paired else esc(new[j1 + k]))
+                for k in range(j2 - j1)
+            ]
+    return '<div class="ag-diff">' + "".join(rows) + "</div>"
+
+
+def annotation(level: str, title: str, message: str, source: str) -> str:
+    """A check's note on a line, as a code review shows it."""
+    glyph = {"error": "cancel", "warning": "warning"}.get(level, "info")
+    return (
+        f'<div class="ag-annot {esc(level)}" role="note"><div class="ag-annot-title">{icon(glyph)}<span>{esc(title)}'
+        f'<span class="ag-annot-src">{esc(source)}</span></span></div><p>{esc(message)}</p></div>'
+    )
 
 
 def condition_item(condition: Condition) -> str:
@@ -428,16 +562,20 @@ def conditions(story: Story, two: bool = False) -> str:
 
 def change_block(story: Story) -> str:
     if not story.changes:
-        return '<p class="ag-note">No fact on this route changed between the snapshots.</p>'
+        return '<p class="ag-note">No condition on this route changed between the snapshots.</p>'
     blocks = []
     for change in story.changes:
         before, after = change.change.split(" → ")
+        pointer = f'<span class="ag-mono">{esc(change.pointers[0])}</span>' if change.pointers else ""
+        if change.fact_id:
+            where = f'Fact <span class="ag-mono">{esc(change.fact_id)}</span> at {pointer or "-"}'
+        else:  # a derived check, such as the policy controls, or a fact one snapshot does not declare
+            where = f"Declared at {pointer}" if pointer else "Not declared in this snapshot"
         blocks.append(
             f'<div class="ag-change"><div class="ag-change-text">{esc(change.text)}</div>'
             f'<div class="ag-flip"><span class="from">{esc(before)}</span>{icon("arrow_forward")}'
             f'<span class="to">{esc(after)}</span></div>'
-            f'<div class="ag-small" style="margin-top:6px">Fact <span class="ag-mono">{esc(change.fact_id)}</span> at '
-            f'<span class="ag-mono">{esc(change.pointers[0] if change.pointers else "-")}</span></div></div>'
+            f'<div class="ag-small" style="margin-top:6px">{where}</div></div>'
         )
     return "".join(blocks)
 
@@ -528,8 +666,14 @@ FAQ = (
         "the result as incomplete instead of guessing.",
     ),
     (
+        "Can it block a pull request?",
+        "Yes. The same engine runs as a command-line check that exits with an error when a change opens a new path or "
+        "leaves the result incomplete. The repository's GitHub Actions workflow runs it on every pull request and marks "
+        "the line responsible. The live demo shows it on the flagship change.",
+    ),
+    (
         "What is out of scope?",
-        "Terraform and raw IAM policy parsing, EC2, general AssumeRole chains, multi-account analysis, CI blocking and "
-        "automatic remediation. The model covers two rules: direct S3 reads and role use through a Lambda function.",
+        "Terraform and raw IAM policy parsing, EC2, general AssumeRole chains, multi-account analysis and automatic "
+        "remediation. The model covers two rules: direct S3 reads and role use through a Lambda function.",
     ),
 )
