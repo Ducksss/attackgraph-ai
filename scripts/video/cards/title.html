@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AttackGraph AI title card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+  /* Brand tokens from docs/brand/README.md. The mark is docs/brand/mark.svg, read from the repo. */
+  :root { --bg: #f9f9fa; --ink: #111114; --body: #3a3a44; --muted: #5f5f72; --line: #e2e2e8; --indigo: #6366f1; --indigo-soft: #eef0ff; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
+  body { font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); position: relative; }
+  .dots { position: absolute; inset: 0; background-image: radial-gradient(circle, rgba(17, 17, 20, 0.11) 1.4px, transparent 1.7px); background-size: 30px 30px;
+    -webkit-mask-image: radial-gradient(ellipse 62% 58% at 50% 50%, #000 30%, transparent 100%); mask-image: radial-gradient(ellipse 62% 58% at 50% 50%, #000 30%, transparent 100%); }
+  .wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  /* Wordmark: Inter Bold, -2% tracking, 0.65 x the tile's height, 0.27 x the tile's height away from it. */
+  .logo { display: flex; align-items: center; gap: 38px; }
+  .logo img { width: 140px; height: 140px; display: block; }
+  .logo span { font-weight: 700; font-size: 91px; letter-spacing: -0.02em; line-height: 1; }
+  .tag { margin: 64px 0 0; font-size: 48px; font-weight: 500; color: var(--body); letter-spacing: -0.012em; line-height: 1.3; text-align: center; max-width: 1500px; text-wrap: balance; }
+</style>
+</head>
+<body>
+  <div class="dots"></div>
+  <div class="wrap">
+    <div class="logo">
+      <img src="../../../docs/brand/mark.svg" alt="">
+      <span>AttackGraph AI</span>
+    </div>
+    <p class="tag">See what a cloud permission change unlocks, before you deploy it.</p>
+  </div>
+</body>
+</html>

@@ -113,7 +113,7 @@ It is a defensive review prototype: it reads synthetic data only, never connects
 
 ## Video demo
 
-2 minutes 28 seconds, 1080p, with captions burned in and no voice. Upload `attackgraph-ai-demo.mp4` to YouTube as Unlisted, and paste its link into Devpost's video field.
+2 minutes 28 seconds, 1080p, with captions burned in and no voice. Upload `attackgraph-ai-demo.mp4` to YouTube as Unlisted, and paste its link into Devpost's video field. A script records it from the real pages: [`scripts/video/`](../../scripts/video/README.md), with the shot list in [`docs/video/shots.md`](../video/shots.md).
 
 1. **0:04** The pull request on GitHub: line 27 flips `false` to `true`, and the AttackGraph AI check fails with its note on that line.
 2. **0:31** The overview's hero: that one change completes all 7 conditions of a route to the admin role.

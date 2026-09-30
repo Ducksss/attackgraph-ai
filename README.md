@@ -342,7 +342,7 @@ State on 30 September 2026.
 - [x] Pull-request check: `python -m attackgraph` and a GitHub Actions workflow (see [Run it as a pull-request check](#run-it-as-a-pull-request-check)). Covered by `tests/test_cli.py`, and the workflow script was run against local merge commits for new, changed, renamed, deleted and broken snapshots. On GitHub on 30 September 2026 it passed the pull request that added it and failed the demo pull request ([#3](https://github.com/Ducksss/attackgraph-ai/pull/3)) as intended, with an annotation on line 27 of `snapshots/app-prod.json`.
 - [x] Brand kit and Devpost submission assets, in [`docs/brand/`](docs/brand/) and [`docs/devpost/`](docs/devpost/).
 - [x] A live AC-9 run of `explain-v2`, which fixes the wording defects found in the first run
-- [ ] Demo video
+- [x] Demo video: a 2½-minute captioned walkthrough, recorded on 30 September 2026. [`scripts/video/`](scripts/video/README.md) rebuilds it; the shot list and captions are in [`docs/video/`](docs/video/).
 - [ ] Beyond the prototype (not started)
     - [ ] Terraform plans and IAM policies as input, instead of hand-written snapshots
     - [ ] Policy evaluation: SCPs, permissions boundaries, conditions and explicit denies

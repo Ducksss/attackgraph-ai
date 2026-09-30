@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AttackGraph AI end card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Brand tokens from docs/brand/README.md; the dark ground follows the site's footer. The mark is docs/brand/mark.svg, read from the repo. */
+  :root { --ink: #111114; --indigo: #6366f1; --indigo-line: #c7cafd; --green: #16a34a; --green-line: #86efac; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--ink); }
+  body { font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #ffffff; position: relative; }
+  .glow { position: absolute; inset: 0; background: radial-gradient(ellipse 55% 45% at 50% 38%, rgba(99, 102, 241, 0.20), transparent 70%); }
+  .wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  .logo { display: flex; align-items: center; gap: 27px; }
+  .logo img { width: 100px; height: 100px; display: block; }
+  .logo span { font-weight: 700; font-size: 65px; letter-spacing: -0.02em; line-height: 1; }
+  .links { margin-top: 70px; display: flex; flex-direction: column; gap: 22px; align-items: center; }
+  .url { font-size: 58px; font-weight: 600; letter-spacing: -0.015em; }
+  .repo { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 38px; font-weight: 500; color: var(--indigo-line); }
+  .built { margin-top: 70px; font-size: 31px; line-height: 1.45; color: #c9c9d4; max-width: 1500px; text-wrap: balance; }
+  .built b { color: #ffffff; font-weight: 600; }
+  .meta { margin-top: 44px; display: flex; gap: 22px; align-items: center; justify-content: center; }
+  .chip { display: inline-flex; align-items: center; gap: 12px; font-size: 27px; font-weight: 500; padding: 11px 24px; border-radius: 999px; border: 1.5px solid rgba(255, 255, 255, 0.22); color: #e8e8ee; }
+  .chip i { width: 12px; height: 12px; border-radius: 50%; background: var(--green-line); display: inline-block; }
+  .credit { position: absolute; left: 0; right: 0; bottom: 64px; font-size: 24px; color: #8d8d9c; text-align: center; }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="wrap">
+    <div class="logo">
+      <img src="../../../docs/brand/mark.svg" alt="">
+      <span>AttackGraph AI</span>
+    </div>
+    <div class="links">
+      <div class="url">attackgraph-ai.vercel.app</div>
+      <div class="repo">github.com/Ducksss/attackgraph-ai</div>
+    </div>
+    <p class="built">Built with <b>Amazon Bedrock (Amazon Nova Pro)</b>, Python, Streamlit, NetworkX, GitHub Actions, Vercel</p>
+    <div class="meta"><span class="chip"><i></i>Synthetic data only</span></div>
+  </div>
+  <div class="credit">Visual style after the Close Webflow template</div>
+</body>
+</html>
