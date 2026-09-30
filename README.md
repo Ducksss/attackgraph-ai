@@ -452,7 +452,7 @@ Suggestions and fixes are welcome. For anything bigger than a small fix, open an
 <!-- LICENCE -->
 ## Licence
 
-This project does not have a licence yet, so the default copyright rules apply ([what that means](https://choosealicense.com/no-permission/)).
+Released under the MIT License. See [`LICENSE`](LICENSE) for the full text.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
