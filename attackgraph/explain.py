@@ -42,8 +42,8 @@ _CHECK_ALIAS = re.compile(r"\bE\d{1,3}\b")
 _CHECK_TERM = re.compile(r"\bexpected[- ]access(?:es)?\b", re.IGNORECASE)
 # Words that add another object after the last check a claim names: "E1 and E2 or any other access"...
 _WIDENING = re.compile(r"\b(?:access|accesses|anything|everything|else|other|relationships|permissions)\b", re.IGNORECASE)
-# ...unless the words only name the checks themselves: "E1 and E2 access checks".
-_CHECKS_ONLY = re.compile(r"(?:(?:expected-access|expected|access)\s+)*checks?", re.IGNORECASE)
+# ...unless the words only name the checks themselves: "E1 and E2 access checks", "expected access relationships".
+_CHECKS_ONLY = re.compile(r"(?:(?:expected-access|expected|access)\s+)*(?:checks?|relationships?)", re.IGNORECASE)
 _NODE_PREFIX = {"principal": "P", "role": "R", "lambda": "L", "s3_object": "O"}
 _DERIVED_TITLES = {
     "same_account": "same-account check",
@@ -359,9 +359,11 @@ def _check_fix_scope(summary: str, evidence: list) -> None:
     words access, accesses, anything, everything, else, other, relationships
     or permissions adds an object that no check covers, as in "E1 and E2 or
     any other access" or "expected accesses or anything else". Words that only
-    name the checks themselves, such as "E1 and E2 access checks", are
-    allowed. The claim stops at the punctuation mark, so "E1 and E2, or any
-    other access" is not caught here; the prompt rule covers it.
+    name the checks themselves are allowed: optional "expected",
+    "expected-access" or "access", then "check(s)" or "relationship(s)" as the
+    last word, as in "E1 and E2 access checks" or "expected access
+    relationships". The claim stops at the punctuation mark, so "E1 and E2,
+    or any other access" is not caught here; the prompt rule covers it.
     """
     cites_check = any(_CHECK_ALIAS.fullmatch(e) for e in evidence)
     for match in _UNAFFECTED_CLAIM.finditer(summary):
