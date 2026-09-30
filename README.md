@@ -42,6 +42,28 @@ Open http://localhost:8501 for the overview, or go straight to the live demo at 
 .venv/bin/python -m pytest
 ```
 
+## Run it as a pull-request check
+
+The engine also runs from the command line, so a CI job can gate on it. This compares the flagship pair and exits 1:
+
+```bash
+.venv/bin/python -m attackgraph fixtures/demo/baseline.json fixtures/demo/proposed.json
+```
+
+| Exit status | Meaning |
+|---|---|
+| 0 | No new modelled high-risk access, and coverage is complete |
+| 1 | The proposal opens a new path to a protected target, or the result is incomplete. An unknown is never a pass. |
+| 2 | Nothing was analysed: a file is missing, unreadable or not a valid snapshot, or the arguments are wrong |
+
+`--report FILE` also writes the Markdown report, and `--github` adds GitHub Actions annotations on the proposal's lines. Given one file, the check compares it with an empty baseline, so every path in it counts as new. It is offline: no Amazon Bedrock or other AWS call.
+
+[`.github/workflows/permission-check.yml`](.github/workflows/permission-check.yml) runs the check on every pull request. Each snapshot the pull request adds or changes under [`snapshots/`](snapshots/) is compared with its version on the base branch. A new path, an incomplete result or an invalid file fails the job and is marked on the line responsible, and the full report goes to the job summary. The job needs no secrets or AWS credentials, and it runs even when no snapshot changed, so it can be made a required check in branch protection.
+
+To see it block a change, open a pull request that sets `f-ci-pass-deploy-admin` on line 27 of [`snapshots/app-prod.json`](snapshots/app-prod.json) to `"true"`, the flagship change. The check fails, and line 27 is annotated with the route it opens and the verified fix. Revert the line and the check passes again. A pull request that closes a path already on the base branch passes with a "Path closed" notice on the line.
+
+The check sees only what the snapshots declare. Terraform and IAM policies are not parsed, so keeping the snapshots in step with the real infrastructure code is manual. The workflow also runs the pull request's own copy of the engine; a team adopting it would pin a released version instead.
+
 ## Status
 
 | Area | State on 30 September 2026 |
@@ -50,6 +72,7 @@ Open http://localhost:8501 for the overview, or go straight to the live demo at 
 | Streamlit app | Two pages styled after the [Close](https://closecrm.webflow.io/) template: an overview at `/` that explains why the check is needed, and the live demo at `/demo`. Checked in a browser at desktop and phone widths in every scenario, and by headless `streamlit.testing` tests. |
 | Hosted site | [attackgraph-ai.vercel.app](https://attackgraph-ai.vercel.app): a static build of the same two pages for the bundled scenarios (see [Hosting](#hosting)). No uploads and no AI calls. The flagship scenario shows the recorded, reviewed Nova Pro reply from run 8 of the AC-9 evidence. |
 | Bedrock explanation | Live on 29 September 2026: Amazon Nova Pro returned 8 validated explanations out of 10 with prompt `explain-v1`, none with an unsupported access or fix claim ([evidence](docs/evidence/ac9-bedrock-review-2026-09-29.md)). The wording defects found in that run are fixed in `explain-v2`, which has not been run live yet. |
+| Pull-request check | `python -m attackgraph` and a GitHub Actions workflow (see [Run it as a pull-request check](#run-it-as-a-pull-request-check)). Covered by `tests/test_cli.py`, and the workflow script was run against local merge commits for new, changed, renamed, deleted and broken snapshots. On GitHub on 30 September 2026 it passed the pull request that added it and failed the demo pull request ([#3](https://github.com/Ducksss/attackgraph-ai/pull/3)) as intended, with an annotation on line 27 of `snapshots/app-prod.json`. |
 | Demo video | Not started. |
 
 ## Amazon Bedrock
@@ -188,6 +211,7 @@ Performance, measured on the build laptop against the two-second target: the bun
 - Policy controls are not evaluated. The fixture declares whether their effect is already reflected in its facts.
 - Entry-principal control and workload-code control are scenario assumptions, not findings about any real account.
 - Results describe the declared synthetic model. They are not a detection rate on real cloud environments.
+- The pull-request check compares the snapshots in the repository. It cannot see an infrastructure change that nobody reflected in them.
 
 ## Hosting
 
@@ -223,11 +247,15 @@ attackgraph/compare.py         finding deltas, fact and configuration changes
 attackgraph/simulate.py        fix candidates and ranking
 attackgraph/explain.py         Bedrock packet, validation, fallback template
 attackgraph/report.py          Markdown export
+attackgraph/cli.py             command-line check for CI: exit status, report, GitHub annotations
+attackgraph/__main__.py        python -m attackgraph
 attackgraph/render.py          escaping and Graphviz witness
 fixtures/demo/                 baseline, proposed, repaired
 fixtures/examples/             unknown fact, unresolved SCP, label injection, invalid files
+snapshots/                     the snapshot the pull-request check watches (the demo baseline)
 scripts/check_bedrock.py       Bedrock access and AC-9 evidence
 scripts/build_site.py          static build of both pages for Vercel
+.github/workflows/             permission-check.yml: the pull-request check
 site/                          the built site: index.html, demo/, reports/, vercel.json
 docs/evidence/                 recorded live Bedrock runs and their review
 docs/images/                   README screenshots of the hosted build
