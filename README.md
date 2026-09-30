@@ -373,7 +373,7 @@ See the [open issues](https://github.com/Ducksss/attackgraph-ai/issues) for know
 | AC-11 | UI and report | `tests/test_report.py`, `tests/test_app.py` (both pages), `tests/test_site.py` (hosted build); keyboard pass by hand |
 | AC-12 | Submission artefacts | Manual: fresh clone run, video in a signed-out browser, claims match this README |
 
-Performance, measured on the build laptop against the two-second target: the bundled comparison plus fix simulation takes about 5 ms. A generated 100-node, 300-fact pair compares in about 1.5 s, and each fix simulation on it adds about 0.7 s.
+Performance, measured on 30 September 2026 on the build laptop, against the two-second target for comparison plus fix simulation: the bundled scenario takes about 10 ms. Random pairs at the input limits (100 nodes and 300 facts, most of them false) take 0.4 to 2.2 s, longer the more roles, functions and entry principals they have. Adversarial input is slower still, because each role an entry principal reaches is then evaluated against every other role through every function: one principal able to pass 49 roles into 49 functions takes about 11 s, and with 66 roles and 33 functions about 18 s. So the target holds for the bundled scenario and for lighter pairs at the limits, but not for denser or adversarial ones.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

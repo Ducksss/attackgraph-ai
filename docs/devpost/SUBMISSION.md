@@ -84,7 +84,7 @@ It is a defensive review prototype: it reads synthetic data only, never connects
 - A live Amazon Bedrock run on 29 September 2026: of ten calls, eight explanations passed validation and none made an unsupported access or fix claim. The reply validator rejected one reply, and AWS refused one call while the new account was being verified.
 - Every result traces back to a line in the input files.
 - The check blocked a real pull request on GitHub, with its note on line 27: the exact line that opened the route.
-- It is fast enough to sit in review. The bundled comparison and fix simulation take about 5 ms, and a 100-node, 300-fact pair compares in about 1.5 s.
+- It is fast enough to sit in review. Measured on 30 September 2026 on the build laptop, the bundled comparison and fix simulation take about 10 ms, well inside the two-second target. At the input limits of 100 nodes and 300 facts, random pairs take 0.4 to 2.2 s, and one principal able to pass 49 roles into 49 functions takes about 11 s, so the target does not hold for every input.
 
 ## What we learned
 
