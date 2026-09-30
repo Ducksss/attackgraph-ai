@@ -6,7 +6,7 @@
 
 ## Review
 
-Reviewed on 2026-09-30 by Claude against the evidence packet (prompt `explain-v2`). This review was done by Claude, not by a person: a person should confirm it before it is relied on or the demo is recorded. Chai Pin Zheng read run 5 and approved it as the hosted page's recorded reply on 30 September 2026; the claim review of all ten runs is Claude's.
+Reviewed on 2026-09-30 by Claude against the evidence packet (prompt `explain-v2`). Claude is an AI assistant, and this claim review of all ten runs is its own; no person has checked it. Chai Pin Zheng read run 5 and approved it as the hosted page's recorded reply on 30 September 2026.
 
 - Ten live Converse calls in one batch: 10 validated, 0 rejected by the reply validator, 0 refused, 0 errors. No request was retried.
 - Unsupported access or fix claims: none. All ten describe the one route in the packet, cite `f-ci-pass-deploy-admin` and the engine-verified fix `revoke/f-ci-pass-deploy-admin`, and state the fix's recorded outcome; none invents another route, target, permission or fix. No reply says the result proves, guarantees or ensures anything, and "real" appears only in denials ("does not indicate a real compromise").

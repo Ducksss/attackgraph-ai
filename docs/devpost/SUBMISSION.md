@@ -69,7 +69,7 @@ It is a defensive review prototype: it reads synthetic data only, never connects
 - **Amazon Bedrock:** the Converse API with Amazon Nova Pro through the APAC cross-region inference profile. No tools, temperature 0.2, at most 700 tokens, one attempt and a 20-second timeout. Replies are validated against the packet and cached per analysis.
 - **App:** Streamlit, with an overview and a live demo. A static build of the same pages runs on Vercel, with no AI calls and no uploads.
 - **Pull-request check:** a command-line entry point and a GitHub Actions workflow that compares each changed snapshot with its version on the base branch and writes GitHub annotations.
-- **Tests:** more than 130 pytest tests mapped to the acceptance criteria, plus a recorded, claim-by-claim review of live Bedrock output.
+- **Tests:** about 150 pytest tests mapped to the acceptance criteria, plus a recorded, claim-by-claim review of live Bedrock output.
 
 ## Challenges we ran into
 
@@ -88,7 +88,7 @@ It is a defensive review prototype: it reads synthetic data only, never connects
 
 ## What we learned
 
-- Constraining the model works, within limits. Giving it aliases instead of names, and checking every identifier it cites, kept its accepted explanations free of unsupported access or fix claims. Identifier checks can't catch everything, though: four of the latest ten replies still overstated what the fix leaves untouched, so every claim still gets a review against the evidence.
+- Constraining the model works, within limits. Giving it aliases instead of names, and checking every identifier it cites, kept its accepted explanations free of unsupported access or fix claims. Identifier checks can't catch everything, though: four of the latest ten replies still claimed the fix leaves other access unaffected, beyond the two access checks the engine ran, so every claim still gets a review against the evidence.
 - Permission risk is about combinations. Modelling "every condition must hold" is what makes the one changed condition stand out.
 - Saying "unknown" out loud is a feature, not a weakness.
 
@@ -115,7 +115,7 @@ It is a defensive review prototype: it reads synthetic data only, never connects
 
 Link: https://youtu.be/dAE6y8M9iQI (YouTube, Unlisted; plays signed out).
 
-2 minutes 28 seconds, 1080p, with captions burned in. Upload `attackgraph-ai-demo.mp4` to YouTube as Unlisted, and paste its link into Devpost's video field. A script records it from the real pages: [`scripts/video/`](../../scripts/video/README.md), with the shot list in [`docs/video/shots.md`](../video/shots.md).
+2 minutes 28 seconds, 1080p, with captions burned in. A script records it from the real pages: [`scripts/video/`](../../scripts/video/README.md), with the shot list in [`docs/video/shots.md`](../video/shots.md).
 
 1. **0:04** The pull request on GitHub: line 27 flips `false` to `true`, and the AttackGraph AI check fails with its note on that line.
 2. **0:31** The overview's hero: that one change completes all 7 conditions of a route to the admin role.
