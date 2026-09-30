@@ -24,6 +24,7 @@ def test_build_renders_the_landing_page_and_every_scenario(tmp_path):
         assert f'id="sc-{key}"' in demo
     assert "1 new path to a protected role" in demo and "Analysis incomplete" in demo
     assert "Recorded AI explanation" in demo and "ebf66418-50b4-4e8f-8ee2-8675d76a6fb0" in demo
+    assert "<dt>Prompt</dt><dd>explain-v2</dd>" in demo  # the prompt that produced the recording, not the current one
     assert "This hosted page never calls Bedrock" in demo
     # The recorded reply names each entity, on the overview quote and in the demo, instead of printing raw IDs.
     for html in (landing, demo):

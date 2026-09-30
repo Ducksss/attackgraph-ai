@@ -129,6 +129,6 @@ Link: https://youtu.be/dAE6y8M9iQI (YouTube, Unlisted; plays signed out).
 
 - [x] The video is on YouTube as Unlisted and plays signed out: https://youtu.be/dAE6y8M9iQI
 - [x] The repository is public, so judges can open the code and the demo pull request.
-- [x] The live Bedrock evidence covers the current prompt, `explain-v2`: 10 of 10 validated on 30 September 2026.
+- [x] The live Bedrock evidence covers the prompt in use at submission, `explain-v2`: 10 of 10 validated on 30 September 2026.
 - [x] The repository is under the MIT License.
 - [ ] Confirm the "What's next" list: it proposes future work, not commitments.

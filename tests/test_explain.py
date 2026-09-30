@@ -6,11 +6,12 @@ import time
 
 import pytest
 from botocore.exceptions import ClientError, NoCredentialsError
-from helpers import ADMIN_FINDING, FIXTURES, baseline_doc, proposed_doc, read_doc, to_snapshot
+from helpers import ADMIN_FINDING, FIXTURES, ROOT, baseline_doc, proposed_doc, read_doc, to_snapshot
 
 from attackgraph import web
 from attackgraph.compare import compare_snapshots
 from attackgraph.explain import (
+    PROMPT_VERSION,
     SYSTEM_PROMPT,
     BedrockExplainer,
     build_packet,
@@ -30,6 +31,9 @@ VALID = {
     "fix_candidate_id": "X1",
     "limitations": "Synthetic model only; nothing was deployed.",
 }
+
+# The ten live explain-v2 replies of the 30 September AC-9 run, as the model wrote them (aliases, not IDs).
+AC9_RUNS = json.loads((FIXTURES / "replies" / "ac9-2026-09-30.json").read_text())["runs"]
 
 
 class FakeClient:
@@ -123,6 +127,7 @@ def test_stored_reply_restores_the_segments_the_live_app_shows(demo):
         (FakeClient(reply=json.dumps({**VALID, "finding_id": "A2"})), "invalid"),
         (FakeClient(reply=json.dumps({**VALID, "severity": "Low"})), "invalid"),
         (FakeClient(reply=json.dumps({**VALID, "summary": "x" * 2000})), "invalid"),
+        (FakeClient(reply=json.dumps({**VALID, "summary": VALID["summary"] + " It does so without affecting other access."})), "invalid"),
         (FakeClient(stop="max_tokens"), "invalid"),
         (FakeClient(stop="content_filtered"), "refused"),
         (FakeClient(stop="guardrail_intervened"), "refused"),
@@ -233,3 +238,186 @@ def test_expected_access_checks_are_citable_evidence(demo):
 def test_prompt_pins_assumption_wording_and_entity_kinds():
     assert "never call it trusted or compromised" in SYSTEM_PROMPT
     assert '"Lambda workload L1"' in SYSTEM_PROMPT
+
+
+def test_reply_fixtures_are_the_reviewed_replies(demo):
+    # The review prints each reply with real IDs; mapped back to the packet's aliases, it must equal the fixture.
+    _, _, packet = demo
+    alias = {value: a for a, (_, value) in packet.display.items()}
+    review = (ROOT / "docs" / "evidence" / "ac9-bedrock-review-2026-09-30.md").read_text()
+    table = {line.split(" | ")[0]: line for line in review.splitlines() if line.startswith("| ")}
+    assert len(AC9_RUNS) == 10
+    for run in AC9_RUNS:
+        section = review.split(f"## Run {run['run']}: generated", 1)[1].split("\n## ", 1)[0]
+        cited, fix = section.split("- Evidence cited: ", 1)[1].split("\n", 1)[0].split("; fix cited: ")
+        summary, limitations = section.split("```text\n", 1)[1].split("\n```", 1)[0].split("\n\nLimitations: ")
+        reply = run["reply"]
+        assert run["request_id"] in section and table[f"| {run['run']}"].endswith(f"| {run['verdict']} |")
+        assert reply["evidence_ids"] == [alias[e] for e in cited.split(", ")] and reply["fix_candidate_id"] == alias[fix]
+        for key, text in (("summary", summary), ("limitations", limitations)):
+            assert reply[key] == "".join(v if kind == "text" else alias[v] for kind, v in stored_segments(text, packet))
+
+
+@pytest.mark.parametrize("run", AC9_RUNS, ids=lambda run: f"run{run['run']}")
+def test_fix_scope_rule_matches_the_30_september_review(demo, run):
+    # The review found that runs 2, 3, 9 and 10 claim the fix leaves more access untouched than checks E1 and E2.
+    _, _, packet = demo
+    result = explainer(FakeClient(reply=json.dumps(run["reply"]))).explain(packet)
+    if run["verdict"].startswith("defect (fix scope)"):
+        assert result.status == "invalid" and result.summary == ()
+        claim = re.fullmatch(r'Reply rejected: summary claims more than the engine checked: "(.+)" names no expected-access check\.', result.error)
+        assert claim and claim.group(1).startswith("without affecting ") and claim.group(1) in run["reply"]["summary"]
+    else:
+        assert result.ok, result.error
+
+
+@pytest.mark.parametrize(
+    "tail, evidence",
+    [
+        ("without affecting E1 and E2.", ["F1"]),  # named by alias, so no separate citation is needed
+        ("without affecting other expected accesses E1 and E2.", ["F1"]),  # runs 4 and 6: the words before the checks are fine
+        ("without affecting other access relationships (E1, E2).", ["F1"]),  # the 29 September wording
+        ("without affecting other access relationships (E1 and E2).", ["F1"]),  # a bracket after the last check is not a widening
+        ("without affecting E1 and E2 as verified in the model.", ["F1"]),  # nor are words that add no object
+        ("without affecting the E1 and E2 access checks.", ["F1"]),  # words that only name the checks themselves
+        ("without affecting E1 and E2 expected-access checks.", ["F1"]),
+        ("without affecting E1 and E2 access relationships.", ["F1"]),
+        ("and keeps checks E1 and E2 passing.", ["F1"]),  # the wording the prompt asks for
+        ("without affecting the expected-access checks.", ["F1", "E1", "E2"]),
+        ("without affecting the expected accesses.", ["F1", "E1"]),
+        ("without affecting expected access relationships.", ["F1", "E1", "E2"]),
+    ],
+    ids=[
+        "aliases",
+        "words-then-aliases",
+        "aliases-in-brackets",
+        "bracket-after-aliases",
+        "plain-words-after-aliases",
+        "aliases-then-access-checks",
+        "aliases-then-expected-access-checks",
+        "aliases-then-access-relationships",
+        "prompt-wording",
+        "cited-checks",
+        "cited-expected-accesses",
+        "cited-expected-access-relationships",
+    ],
+)
+def test_claims_scoped_to_the_expected_access_checks_are_accepted(demo, tail, evidence):
+    _, _, packet = demo
+    reply = {**VALID, "summary": "X1 revokes F1 and removes this finding " + tail, "evidence_ids": evidence}
+    assert explainer(FakeClient(reply=json.dumps(reply))).explain(packet).ok
+
+
+@pytest.mark.parametrize(
+    "tail, evidence, reason",
+    [
+        (
+            "without affecting other access, and checks E1 and E2 still pass.",
+            ["F1", "E1", "E2"],
+            'summary claims more than the engine checked: "without affecting other access" names no expected-access check',
+        ),
+        (
+            "without affecting other expected accesses.",
+            ["F1"],
+            'summary claims "without affecting other expected accesses" but evidence_ids cite no expected-access check',
+        ),
+        (
+            "without affecting E1 and E2 or any other access.",
+            ["F1", "E1", "E2"],
+            'summary claims more than the engine checked: "without affecting E1 and E2 or any other access" '
+            'adds "or any other access" to the checks it names',
+        ),
+        (
+            "without affecting E1 and E2 and other access relationships.",
+            ["F1", "E1", "E2"],
+            'summary claims more than the engine checked: "without affecting E1 and E2 and other access relationships" '
+            'adds "and other access relationships" to the checks it names',
+        ),
+        (
+            "without affecting E1 and E2 or anything else.",
+            ["F1", "E1", "E2"],
+            'summary claims more than the engine checked: "without affecting E1 and E2 or anything else" '
+            'adds "or anything else" to the checks it names',
+        ),
+        (
+            "without affecting E1 and E2 access or other permissions.",
+            ["F1", "E1", "E2"],
+            'summary claims more than the engine checked: "without affecting E1 and E2 access or other permissions" '
+            'adds "access or other permissions" to the checks it names',
+        ),
+        (
+            "without affecting E1 and E2 access checks and other permissions.",  # naming the checks, then more
+            ["F1", "E1", "E2"],
+            'summary claims more than the engine checked: "without affecting E1 and E2 access checks and other permissions" '
+            'adds "access checks and other permissions" to the checks it names',
+        ),
+        (
+            "without affecting other expected accesses or anything else.",  # no alias: the tail after the last term
+            ["F1", "E1", "E2"],
+            'summary claims more than the engine checked: "without affecting other expected accesses or anything else" '
+            'adds "or anything else" to the checks it names',
+        ),
+        (
+            "without affecting other access relationships.",  # run 10's wording: rejected even with the checks cited
+            ["F1", "E1", "E2"],
+            'summary claims more than the engine checked: "without affecting other access relationships" names no expected-access check',
+        ),
+        (
+            "without affecting expected access relationships or anything else.",
+            ["F1", "E1", "E2"],
+            'summary claims more than the engine checked: "without affecting expected access relationships or anything else" '
+            'adds "relationships or anything else" to the checks it names',
+        ),
+        (
+            "without affecting E1 and E2 access relationships or other permissions.",
+            ["F1", "E1", "E2"],
+            'summary claims more than the engine checked: "without affecting E1 and E2 access relationships or other permissions" '
+            'adds "access relationships or other permissions" to the checks it names',
+        ),
+    ],
+    ids=[
+        "wider-claim-then-checks",
+        "uncited-checks",
+        "widened-to-other-access",
+        "widened-to-relationships",
+        "widened-to-anything-else",
+        "widened-after-access",
+        "widened-after-access-checks",
+        "term-widened-to-anything-else",
+        "access-relationships-without-a-check",
+        "term-relationships-then-anything-else",
+        "aliases-relationships-then-permissions",
+    ],
+)
+def test_unscoped_claims_are_rejected_with_the_reason(demo, tail, evidence, reason):
+    _, _, packet = demo
+    reply = {**VALID, "summary": "X1 revokes F1 and removes this finding " + tail, "evidence_ids": evidence}
+    result = explainer(FakeClient(reply=json.dumps(reply))).explain(packet)
+    assert result.status == "invalid" and result.error == f"Reply rejected: {reason}."
+
+
+def test_a_widening_after_a_comma_is_a_known_limit(demo):
+    # The claim stops at the first punctuation mark, so ", or any other access" is outside it and the reply
+    # passes. Only the prompt rule, which forbids "other access", covers this wording.
+    _, _, packet = demo
+    reply = {**VALID, "summary": "X1 revokes F1 and removes this finding without affecting E1 and E2, or any other access."}
+    assert explainer(FakeClient(reply=json.dumps(reply))).explain(packet).ok
+
+
+def test_prompt_limits_the_fix_claim_to_the_expected_access_checks():
+    rule = next(line for line in SYSTEM_PROMPT.splitlines() if line.startswith("- The engine tested the fix candidate only against"))
+    assert "expected-access checks listed with it" in rule and '"keeps checks E1 and E2 passing"' in rule
+    for wider in ("other access", "existing access", "all access", "nothing else changes"):
+        assert f'"{wider}"' in rule
+
+
+def test_prompt_version_is_part_of_the_cache_key(demo, monkeypatch):
+    _, _, packet = demo
+    client = FakeClient()
+    ai = explainer(client)
+    assert PROMPT_VERSION == "explain-v3" and ai.cache_key(packet)[-1] == PROMPT_VERSION
+    assert ai.explain(packet).prompt_version == "explain-v3"
+    monkeypatch.setattr("attackgraph.explain.PROMPT_VERSION", "explain-v2")
+    assert ai.cached(packet) is None  # a reply cached for one prompt version is never served for another
+    ai.explain(packet)
+    assert len(client.calls) == 2

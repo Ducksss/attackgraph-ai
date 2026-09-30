@@ -1,0 +1,128 @@
+{
+ "source": "docs/evidence/ac9-bedrock-review-2026-09-30.md",
+ "model_id": "apac.amazon.nova-pro-v1:0",
+ "prompt_version": "explain-v2",
+ "note": "The ten live replies as the model wrote them: each real ID in the review is mapped back to its packet alias. \"this finding\" stays text; the model may have written A1, which is shown the same way. verdict is the review's.",
+ "runs": [
+  {
+   "run": 1,
+   "request_id": "e0ba1dda-b878-4aa5-8a8d-6b74eee468a1",
+   "verdict": "no unsupported claims; minor wording",
+   "reply": {
+    "finding_id": "A1",
+    "summary": "The proposed change allows principal P1 to pass role R1 to Lambda workload L1, enabling P1 to run code as R1. This change is modeled to grant P1 privileged access via the Lambda service. Fix candidate X1, which revokes fact F1, successfully removes this finding without affecting existing access relationships E1 and E2.",
+    "evidence_ids": ["F1", "F2", "F3", "F4", "F5", "D1", "D2", "E1", "E2"],
+    "fix_candidate_id": "X1",
+    "limitations": "This is a synthetic model. No changes were made to any AWS accounts, and the results do not indicate a real compromise. The scenario assumes P1 is controlled by the change proposer, and fact F4 is an assumed permission, not an observed one."
+   }
+  },
+  {
+   "run": 2,
+   "request_id": "3fdcd8e7-f4f1-4cea-8d40-b3b0c51b1627",
+   "verdict": "defect (fix scope)",
+   "reply": {
+    "finding_id": "A1",
+    "summary": "The proposed change allows principal P1 to pass role R1 to Lambda workload L1, enabling P1 to run code as R1. This is modeled as a high-severity impact because R1 is classified as a privileged role. The fix candidate X1, which revokes the iam_pass_role_to_lambda fact F1, removes this finding without affecting existing access as verified in the model.",
+    "evidence_ids": ["F1", "F2", "F3", "F4", "F5", "D1", "D2", "E1", "E2"],
+    "fix_candidate_id": "X1",
+    "limitations": "This is a synthetic model: no changes were made to any AWS account, and the result does not indicate a real compromise. The scenario assumes P1 is controlled by the party proposing the change and that P1 controls the code of L1."
+   }
+  },
+  {
+   "run": 3,
+   "request_id": "4ba6d5c2-b663-44b5-a4c7-4af24c0f103d",
+   "verdict": "defect (fix scope); checks not cited",
+   "reply": {
+    "finding_id": "A1",
+    "summary": "The proposed change allows principal P1 to pass role R1 to Lambda workload L1, enabling P1 to run code as R1. This is modeled as a high-severity impact because R1 is classified as a privileged role. Fix candidate X1, which revokes the iam_pass_role_to_lambda fact F1, eliminates this finding without affecting existing access as verified in the model.",
+    "evidence_ids": ["F1", "F2", "F3", "F4", "F5", "D1", "D2"],
+    "fix_candidate_id": "X1",
+    "limitations": "This is a synthetic model: no changes were made in any AWS account, and the result does not reflect a real compromise. The scenario assumes P1 is controlled by the party proposing the change and that P1 controls the code of L1."
+   }
+  },
+  {
+   "run": 4,
+   "request_id": "f26a6c58-eb55-457c-ac98-6f0638158c4e",
+   "verdict": "no unsupported claims; minor wording",
+   "reply": {
+    "finding_id": "A1",
+    "summary": "The proposed change allows principal P1 to pass role R1 to Lambda workload L1, enabling P1 to run code as R1. This is modeled as a high-severity impact because R1 is classified as a privileged role. The fix candidate X1, which revokes the iam_pass_role_to_lambda fact F1, successfully removes this finding without affecting other expected accesses E1 and E2.",
+    "evidence_ids": ["F1", "F2", "F3", "F4", "F5", "D1", "D2", "E1", "E2"],
+    "fix_candidate_id": "X1",
+    "limitations": "This is a synthetic model: no changes were made in any AWS account, and the result does not indicate a real compromise. The scenario assumes P1 is controlled by the party proposing the change and that P1 controls the code of L1."
+   }
+  },
+  {
+   "run": 5,
+   "request_id": "ebf66418-50b4-4e8f-8ee2-8675d76a6fb0",
+   "verdict": "no unsupported claims; recorded reply",
+   "reply": {
+    "finding_id": "A1",
+    "summary": "The proposed change allows principal P1 to pass role R1 to Lambda workload L1, enabling P1 to run code as R1. This is modeled as a high-severity impact because R1 is classified as a privileged role. Fix candidate X1, which revokes fact F1 (iam_pass_role_to_lambda from P1 to R1), removes this finding without affecting expected accesses E1 and E2.",
+    "evidence_ids": ["F1", "F2", "F3", "F4", "F5", "D1", "D2", "E1", "E2"],
+    "fix_candidate_id": "X1",
+    "limitations": "This is a synthetic model. No changes were made to any AWS accounts. The result does not indicate a real compromise. The scenario assumes P1 is controlled by the change proposer, and fact F4 is assumed, not observed."
+   }
+  },
+  {
+   "run": 6,
+   "request_id": "e9e5fa89-9ab3-42f7-a68a-f7b5855ea885",
+   "verdict": "no unsupported claims; minor wording",
+   "reply": {
+    "finding_id": "A1",
+    "summary": "The proposed change allows principal P1 to pass role R1 to Lambda workload L1, enabling P1 to run code as R1. This is modeled as a high-severity impact because R1 is classified as a privileged role. The fix candidate X1, which revokes the iam_pass_role_to_lambda fact F1, successfully removes this finding without affecting other expected accesses E1 and E2.",
+    "evidence_ids": ["F1", "F2", "F3", "F4", "F5", "D1", "D2", "E1", "E2"],
+    "fix_candidate_id": "X1",
+    "limitations": "This is a synthetic model. No changes were made to any AWS account. The result does not indicate a real compromise. The scenario assumes P1 is controlled by the party proposing the change and that P1 controls the code of L1."
+   }
+  },
+  {
+   "run": 7,
+   "request_id": "3c73b2d9-4812-4e99-acff-d737d71f3333",
+   "verdict": "no unsupported claims; minor wording",
+   "reply": {
+    "finding_id": "A1",
+    "summary": "The proposed change allows principal P1 to pass role R1 to Lambda workload L1, enabling P1 to run code as R1. This is modeled as a high-severity impact because R1 is classified as a privileged role. Fix candidate X1, which revokes the iam_pass_role_to_lambda fact F1, removes this finding without affecting other expected accesses.",
+    "evidence_ids": ["F1", "F2", "F3", "F4", "F5", "D1", "D2", "E1", "E2"],
+    "fix_candidate_id": "X1",
+    "limitations": "This is a synthetic model. No changes were made to any AWS account. The result does not indicate a real compromise. The scenario assumes P1 is controlled by the change proposer and that P1 controls the Lambda code (F4)."
+   }
+  },
+  {
+   "run": 8,
+   "request_id": "4437b2c6-2d0d-4b4e-beeb-1da51ff37c46",
+   "verdict": "no unsupported claims; minor wording",
+   "reply": {
+    "finding_id": "A1",
+    "summary": "The proposed change allows principal P1 to pass role R1 to Lambda workload L1, enabling P1 to run code as R1. This is modeled as a high-severity impact because R1 is classified as a privileged role. Fix candidate X1, which revokes the iam_pass_role_to_lambda fact F1, eliminates this finding without affecting other expected accesses.",
+    "evidence_ids": ["F1", "F2", "F3", "F4", "F5", "D1", "D2", "E1", "E2"],
+    "fix_candidate_id": "X1",
+    "limitations": "This is a synthetic model: no changes were made in any AWS account, and the result does not reflect a real-world compromise. The scenario assumes P1 is controlled by the party proposing the change and that P1 controls the code of L1."
+   }
+  },
+  {
+   "run": 9,
+   "request_id": "a13f2f73-03d7-47de-9bd7-08f5740154b3",
+   "verdict": "defect (fix scope)",
+   "reply": {
+    "finding_id": "A1",
+    "summary": "The proposed change allows principal P1 to pass role R1 to Lambda workload L1, enabling P1 to run code as R1. This is modeled as a high-severity impact because R1 is classified as a privileged role. The fix candidate X1, which revokes the iam_pass_role_to_lambda fact F1, successfully removes this finding without affecting other modeled accesses.",
+    "evidence_ids": ["F1", "F2", "F3", "F4", "F5", "D1", "D2", "E1", "E2"],
+    "fix_candidate_id": "X1",
+    "limitations": "This is a synthetic model. No changes were made to any AWS account. The result does not indicate a real compromise. The scenario assumes P1 is controlled by the change proposer and that P1 controls the Lambda code (F4)."
+   }
+  },
+  {
+   "run": 10,
+   "request_id": "4c149530-b60c-4c2b-b157-349be5567a99",
+   "verdict": "defect (fix scope)",
+   "reply": {
+    "finding_id": "A1",
+    "summary": "The proposed change allows principal P1 to pass role R1 to Lambda workload L1, enabling P1 to run code as R1. This is modeled as a high-severity impact because R1 is classified as a privileged role. The fix candidate X1, which revokes the iam_pass_role_to_lambda fact F1, successfully removes this finding without affecting other access relationships.",
+    "evidence_ids": ["F1", "F2", "F3", "F4", "F5", "D1", "D2", "E1", "E2"],
+    "fix_candidate_id": "X1",
+    "limitations": "This is a synthetic model. No actual AWS resources were modified. The finding and fix candidate are based on the provided configuration JSON and do not reflect the state of any real AWS account."
+   }
+  }
+ ]
+}

@@ -3,9 +3,11 @@
 The model only explains. It receives a bounded evidence packet in which every
 node, fact, check and fix candidate is replaced by an opaque alias (P1, F3,
 X1...), so no uploader-controlled text (labels, IDs) reaches the prompt. The
-reply must be one JSON object whose identifiers all exist in the packet; any
-other reply is discarded and the template summary is shown instead. Nothing
-the model returns can change findings, counts, severity, coverage or fixes.
+reply must be one JSON object whose identifiers all exist in the packet, and
+it may say what a fix leaves unaffected only through the expected-access
+checks the engine ran; any other reply is discarded and the template summary
+is shown instead. Nothing the model returns can change findings, counts,
+severity, coverage or fixes.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ from .compare import Comparison, FindingDelta
 from .simulate import FixCandidate
 from .snapshot import PREDICATES
 
-PROMPT_VERSION = "explain-v2"
+PROMPT_VERSION = "explain-v3"
 DEFAULT_MODEL_ID = "apac.amazon.nova-pro-v1:0"
 DEFAULT_REGION = "ap-southeast-1"
 TIMEOUT_SECONDS = 20
@@ -33,6 +35,15 @@ SUMMARY_LIMIT = 1200
 LIMITATIONS_LIMIT = 600
 
 _ALIAS_TOKEN = re.compile(r"\b([APRLOFDXE])(\d{1,3})\b")
+# All 18 replies in the AC-9 evidence (29 and 30 September 2026) state what the fix leaves
+# untouched as "without affecting ...". The claim runs to the next punctuation mark.
+_UNAFFECTED_CLAIM = re.compile(r"\bwithout\s+affecting\b[^,;:.!?\n]*", re.IGNORECASE)
+_CHECK_ALIAS = re.compile(r"\bE\d{1,3}\b")
+_CHECK_TERM = re.compile(r"\bexpected[- ]access(?:es)?\b", re.IGNORECASE)
+# Words that add another object after the last check a claim names: "E1 and E2 or any other access"...
+_WIDENING = re.compile(r"\b(?:access|accesses|anything|everything|else|other|relationships|permissions)\b", re.IGNORECASE)
+# ...unless the words only name the checks themselves: "E1 and E2 access checks", "expected access relationships".
+_CHECKS_ONLY = re.compile(r"(?:(?:expected-access|expected|access)\s+)*(?:checks?|relationships?)", re.IGNORECASE)
 _NODE_PREFIX = {"principal": "P", "role": "R", "lambda": "L", "s3_object": "O"}
 _DERIVED_TITLES = {
     "same_account": "same-account check",
@@ -48,6 +59,7 @@ Rules:
 - Use only information in the packet. Do not add permissions, paths, services, attack techniques or AWS behaviour that the packet does not state.
 - Do not dispute or change the finding, its severity, status, counts or coverage.
 - Describe only the fix candidate supplied in the packet, with the outcome the engine recorded. If no candidate is supplied, say that no engine-tested fix is available. Never propose another fix.
+- The engine tested the fix candidate only against the expected-access checks listed with it. State the fix's effect on other access only through those checks, citing them by alias, for example "keeps checks E1 and E2 passing". Never generalise beyond them: no "other access", "existing access", "all access" or "nothing else changes". If no checks are listed, make no claim about other access.
 - Make clear that this is a synthetic model: nothing was deployed, executed or changed in any AWS account, and the result is not evidence of a real compromise.
 - Refer to entities only by their aliases, and give each one its kind the first time you name it, for example "principal P1", "role R1", "Lambda workload L1".
 - State assumptions exactly as the packet words them. The entry principal is treated as controlled by the party proposing the change; never call it trusted or compromised.
@@ -332,11 +344,52 @@ def stored_segments(text: str, packet: EvidencePacket) -> tuple[tuple[str, str],
     return tuple(out)
 
 
-def parse_response(text: str, packet: EvidencePacket) -> dict:
-    """Validate the reply's shape and identifiers; raise ResponseError otherwise.
+def _check_fix_scope(summary: str, evidence: list) -> None:
+    """Reject a summary that says the fix leaves more untouched than the engine checked.
 
-    Identifier checks cannot prove the prose is true. The evidence stays on
-    screen beside the explanation, and generated claims are reviewed by hand.
+    The engine tests a fix only against the expected-access checks listed with
+    it. So the words after "without affecting", up to the next punctuation
+    mark, must name one of those checks by alias (E1), or call them expected
+    access while evidence_ids cites one. "existing access" or "other access
+    relationships" claims that the rest of the model is unaffected, which
+    nothing checked.
+
+    The claim must also end with the checks it names. After its last alias,
+    or after its last "expected access(es)" when it names no alias, any of the
+    words access, accesses, anything, everything, else, other, relationships
+    or permissions adds an object that no check covers, as in "E1 and E2 or
+    any other access" or "expected accesses or anything else". Words that only
+    name the checks themselves are allowed: optional "expected",
+    "expected-access" or "access", then "check(s)" or "relationship(s)" as the
+    last word, as in "E1 and E2 access checks" or "expected access
+    relationships". The claim stops at the punctuation mark, so "E1 and E2,
+    or any other access" is not caught here; the prompt rule covers it.
+    """
+    cites_check = any(_CHECK_ALIAS.fullmatch(e) for e in evidence)
+    for match in _UNAFFECTED_CLAIM.finditer(summary):
+        claim = " ".join(match.group(0).split())
+        aliases = list(_CHECK_ALIAS.finditer(claim))
+        scope = aliases or list(_CHECK_TERM.finditer(claim))
+        if not scope:
+            raise ResponseError(f'summary claims more than the engine checked: "{_quote(claim)}" names no expected-access check')
+        tail = claim[scope[-1].end() :].strip()
+        if _WIDENING.search(tail) and not _CHECKS_ONLY.fullmatch(tail):
+            raise ResponseError(
+                f'summary claims more than the engine checked: "{_quote(claim)}" adds "{_quote(tail)}" to the checks it names'
+            )
+        if not aliases and not cites_check:
+            raise ResponseError(f'summary claims "{_quote(claim)}" but evidence_ids cite no expected-access check')
+
+
+def _quote(text: str, limit: int = 100) -> str:
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def parse_response(text: str, packet: EvidencePacket) -> dict:
+    """Validate the reply's shape, identifiers and fix scope; raise ResponseError otherwise.
+
+    These checks cannot prove the prose is true. The evidence stays on screen
+    beside the explanation, and generated claims are reviewed by hand.
     """
     body = text.strip()
     if body.startswith("```"):
@@ -366,9 +419,12 @@ def parse_response(text: str, packet: EvidencePacket) -> dict:
     fix = data["fix_candidate_id"]
     if fix is not None and fix not in packet.fix_aliases:
         raise ResponseError("fix_candidate_id is not a supplied fix candidate")
+    summary_segments = _segments(summary.strip(), packet)
+    limitation_segments = _segments(limitations.strip(), packet)
+    _check_fix_scope(summary.strip(), evidence)
     return {
-        "summary": _segments(summary.strip(), packet),
-        "limitations": _segments(limitations.strip(), packet),
+        "summary": summary_segments,
+        "limitations": limitation_segments,
         "evidence_ids": tuple(packet.display[e][1] for e in evidence),
         "cited_fix": packet.display[fix][1] if fix else None,
     }
