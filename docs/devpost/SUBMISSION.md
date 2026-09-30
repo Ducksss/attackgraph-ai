@@ -129,7 +129,7 @@ Not recorded yet. A three-minute outline that follows the README's demo script:
 ## Before you submit
 
 - [ ] Record the video and add its link.
-- [ ] The repository is private: make it public, or give the judges access.
+- [x] The repository is public, so judges can open the code and the demo pull request.
 - [ ] The live Bedrock evidence is for prompt `explain-v1`. Re-run it with `explain-v2` before quoting results for the current prompt.
-- [ ] Choose a licence. The repository has none yet.
+- [x] The repository is under the MIT License.
 - [ ] Confirm the "What's next" list: it proposes future work, not commitments.
