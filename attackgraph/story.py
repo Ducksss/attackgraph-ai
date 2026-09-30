@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .analysis import RULE_LAMBDA, TRUE, UNKNOWN, Candidate, Finding, PotentialFinding, Prerequisite
+from .analysis import FALSE, RULE_LAMBDA, UNKNOWN, Candidate, Finding, PotentialFinding, Prerequisite
 from .compare import Comparison, FindingDelta
 from .snapshot import POLICY_CONTROLS, Snapshot
 
@@ -54,7 +54,7 @@ class Step:
     title: str
     conditions: tuple[Condition, ...]
     baseline_state: str | None  # the same candidate in the baseline; None when never evaluated there
-    baseline_blockers: tuple[str, ...]
+    baseline_blockers: tuple[str, ...]  # the conditions that were false there
 
 
 @dataclass(frozen=True)
@@ -84,7 +84,7 @@ def condition_text(key: str, candidate: Candidate, snapshot: Snapshot) -> str:
         "iam_pass_role_to_lambda": f"{subject} can pass {target} to Lambda",
         "lambda_create_function": f"{subject} can create {via}",
         "lambda_invoke_function": f"{subject} can invoke {via}",
-        "controls_workload_code": f"{subject} controls the code {via} runs",
+        "controls_workload_code": f"{subject} controls the code that {via} runs",
         "role_trusts_lambda_service": f"{target} trusts the Lambda service",
         "same_account": "Everything is in one AWS account",
         "policy_controls_resolved": "No unresolved policy restrictions apply",
@@ -197,9 +197,7 @@ def build_story(comparison: Comparison, delta: FindingDelta) -> Story:
         conditions = [condition(candidate, p) for p in candidate.prerequisites]
         conditions.sort(key=lambda c: c.change is None)  # changed conditions first, stable otherwise
         before = comparison.baseline.candidates.get(candidate.id)
-        blockers = tuple(
-            p.fact_id or p.key for p in (before.prerequisites if before else ()) if p.state != TRUE
-        )
+        blockers = tuple(p.fact_id or p.key for p in (before.prerequisites if before else ()) if p.state == FALSE)
         steps.append(Step(candidate, title, tuple(conditions), before.state if before else None, blockers))
 
     changes = tuple(c for step in steps for c in step.conditions if c.change is not None)
