@@ -275,11 +275,22 @@ def test_fix_scope_rule_matches_the_30_september_review(demo, run):
     "tail, evidence",
     [
         ("without affecting E1 and E2.", ["F1"]),  # named by alias, so no separate citation is needed
+        ("without affecting other expected accesses E1 and E2.", ["F1"]),  # runs 4 and 6: the words before the checks are fine
         ("without affecting other access relationships (E1, E2).", ["F1"]),  # the 29 September wording
+        ("without affecting other access relationships (E1 and E2).", ["F1"]),  # a bracket after the last check is not a widening
+        ("without affecting E1 and E2 as verified in the model.", ["F1"]),  # nor are words that add no object
         ("and keeps checks E1 and E2 passing.", ["F1"]),  # the wording the prompt asks for
         ("without affecting the expected-access checks.", ["F1", "E1", "E2"]),
     ],
-    ids=["aliases", "aliases-in-brackets", "prompt-wording", "cited-checks"],
+    ids=[
+        "aliases",
+        "words-then-aliases",
+        "aliases-in-brackets",
+        "bracket-after-aliases",
+        "plain-words-after-aliases",
+        "prompt-wording",
+        "cited-checks",
+    ],
 )
 def test_claims_scoped_to_the_expected_access_checks_are_accepted(demo, tail, evidence):
     _, _, packet = demo
@@ -300,14 +311,40 @@ def test_claims_scoped_to_the_expected_access_checks_are_accepted(demo, tail, ev
             ["F1"],
             'summary claims "without affecting other expected accesses" but evidence_ids cite no expected-access check',
         ),
+        (
+            "without affecting E1 and E2 or any other access.",
+            ["F1", "E1", "E2"],
+            'summary claims more than the engine checked: "without affecting E1 and E2 or any other access" '
+            'adds "or any other access" to the checks it names',
+        ),
+        (
+            "without affecting E1 and E2 and other access relationships.",
+            ["F1", "E1", "E2"],
+            'summary claims more than the engine checked: "without affecting E1 and E2 and other access relationships" '
+            'adds "and other access relationships" to the checks it names',
+        ),
+        (
+            "without affecting E1 and E2 or anything else.",
+            ["F1", "E1", "E2"],
+            'summary claims more than the engine checked: "without affecting E1 and E2 or anything else" '
+            'adds "or anything else" to the checks it names',
+        ),
     ],
-    ids=["wider-claim-then-checks", "uncited-checks"],
+    ids=["wider-claim-then-checks", "uncited-checks", "widened-to-other-access", "widened-to-relationships", "widened-to-anything-else"],
 )
-def test_claims_not_tied_to_a_check_are_rejected_with_the_reason(demo, tail, evidence, reason):
+def test_unscoped_claims_are_rejected_with_the_reason(demo, tail, evidence, reason):
     _, _, packet = demo
     reply = {**VALID, "summary": "X1 revokes F1 and removes this finding " + tail, "evidence_ids": evidence}
     result = explainer(FakeClient(reply=json.dumps(reply))).explain(packet)
     assert result.status == "invalid" and result.error == f"Reply rejected: {reason}."
+
+
+def test_a_widening_after_a_comma_is_a_known_limit(demo):
+    # The claim stops at the first punctuation mark, so ", or any other access" is outside it and the reply
+    # passes. Only the prompt rule, which forbids "other access", covers this wording.
+    _, _, packet = demo
+    reply = {**VALID, "summary": "X1 revokes F1 and removes this finding without affecting E1 and E2, or any other access."}
+    assert explainer(FakeClient(reply=json.dumps(reply))).explain(packet).ok
 
 
 def test_prompt_limits_the_fix_claim_to_the_expected_access_checks():

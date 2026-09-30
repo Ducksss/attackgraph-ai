@@ -40,6 +40,8 @@ _ALIAS_TOKEN = re.compile(r"\b([APRLOFDXE])(\d{1,3})\b")
 _UNAFFECTED_CLAIM = re.compile(r"\bwithout\s+affecting\b[^,;:.!?\n]*", re.IGNORECASE)
 _CHECK_ALIAS = re.compile(r"\bE\d{1,3}\b")
 _CHECK_TERM = re.compile(r"\bexpected[- ]access", re.IGNORECASE)
+# Words that add another object after the last check a claim names: "E1 and E2 or any other access".
+_WIDENING = re.compile(r"\b(?:access|accesses|anything|everything|else|other|relationships|permissions)\b", re.IGNORECASE)
 _NODE_PREFIX = {"principal": "P", "role": "R", "lambda": "L", "s3_object": "O"}
 _DERIVED_TITLES = {
     "same_account": "same-account check",
@@ -349,17 +351,33 @@ def _check_fix_scope(summary: str, evidence: list) -> None:
     access while evidence_ids cites one. "existing access" or "other access
     relationships" claims that the rest of the model is unaffected, which
     nothing checked.
+
+    A claim that names checks must also end with them. After its last alias,
+    any of the words access, accesses, anything, everything, else, other,
+    relationships or permissions adds an object that no check covers, as in
+    "E1 and E2 or any other access". The claim stops at the punctuation mark,
+    so "E1 and E2, or any other access" is not caught here; the prompt rule
+    covers it.
     """
     cites_check = any(_CHECK_ALIAS.fullmatch(e) for e in evidence)
     for match in _UNAFFECTED_CLAIM.finditer(summary):
         claim = " ".join(match.group(0).split())
-        if _CHECK_ALIAS.search(claim):
+        aliases = list(_CHECK_ALIAS.finditer(claim))
+        if aliases:
+            tail = claim[aliases[-1].end() :].strip()
+            if _WIDENING.search(tail):
+                raise ResponseError(
+                    f'summary claims more than the engine checked: "{_quote(claim)}" adds "{_quote(tail)}" to the checks it names'
+                )
             continue
-        quoted = claim if len(claim) <= 100 else claim[:99] + "…"
         if not _CHECK_TERM.search(claim):
-            raise ResponseError(f'summary claims more than the engine checked: "{quoted}" names no expected-access check')
+            raise ResponseError(f'summary claims more than the engine checked: "{_quote(claim)}" names no expected-access check')
         if not cites_check:
-            raise ResponseError(f'summary claims "{quoted}" but evidence_ids cite no expected-access check')
+            raise ResponseError(f'summary claims "{_quote(claim)}" but evidence_ids cite no expected-access check')
+
+
+def _quote(text: str, limit: int = 100) -> str:
+    return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
 def parse_response(text: str, packet: EvidencePacket) -> dict:
