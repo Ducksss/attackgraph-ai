@@ -1,0 +1,49 @@
+# The automated test suite, on every pull request and every push to main.
+#
+# The permission check (permission-check.yml) only runs the engine on the
+# snapshots a pull request changes. This workflow runs the whole pytest suite,
+# including the differential test that compares the engine with its frozen
+# pre-optimisation copy in tests/reference/. Node 22 and the runner's Chrome
+# let the image generator's real-render tests run instead of skipping.
+#
+# No secrets and no AWS credentials: Amazon Bedrock is never called, and the
+# explanation tests use stub clients.
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - run: pip install -r requirements.txt
+
+      # -o addopts="" undoes the repo's default -q so the summary line shows
+      # the pass count; -rs lists every skipped test and why.
+      - name: Run the test suite
+        run: python -m pytest -o addopts="" -q -rs
