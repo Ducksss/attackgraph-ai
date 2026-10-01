@@ -158,6 +158,7 @@ The app runs locally in about a minute. Live Amazon Bedrock explanations are opt
    ```bash
    .venv/bin/python -m pytest
    ```
+   GitHub Actions runs the same suite on every pull request and every push to `main` ([`tests.yml`](.github/workflows/tests.yml)).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -426,7 +427,7 @@ scripts/check_bedrock.py       Bedrock access and AC-9 evidence
 scripts/build_site.py          static build of both pages for Vercel
 scripts/build_assets.py        README screenshots, brand kit and Devpost images, rendered with headless Chrome
 scripts/assets/shoot.mjs       the headless-Chrome renderer it drives
-.github/workflows/             permission-check.yml: the pull-request check
+.github/workflows/             permission-check.yml: the pull-request check; tests.yml: the test suite
 site/                          the built site: index.html, demo/, reports/, vercel.json
 docs/brand/                    logo, palette, social preview and brand guide
 docs/devpost/                  Devpost submission text, thumbnail and gallery
