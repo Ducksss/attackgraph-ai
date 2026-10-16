@@ -391,7 +391,9 @@ def final_cta() -> str:
         '<div class="ag-final">'
         '<h2 class="ag-h2">See the path before it ships. <span class="ag-soft">It takes one click.</span></h2>'
         '<p class="ag-sub" style="margin:0 auto">No sign-up. Synthetic data only.</p>'
-        f'<div class="ag-cta"><a class="ag-btn ag-btn-primary" href="{web.DEMO}">Open the live demo</a></div>'
+        f'<div class="ag-cta"><a class="ag-btn ag-btn-primary" href="{web.DEMO}">Open the live demo</a>'
+        f'<a class="ag-btn ag-btn-ghost" href="{web.VIDEO}">{icon("play_circle")}Watch the 2-minute video</a>'
+        f'<a class="ag-btn ag-btn-ghost" href="{web.REPO}">{icon("code")}Source on GitHub</a></div>'
         "</div>"
     )
 
@@ -401,9 +403,11 @@ def footer(hosted: bool) -> str:
     return (
         '<footer class="ag-dark-footer"><div class="ag-dark-inner"><div>'
         f'<a class="ag-brand" href="{web.LANDING}"><span class="ag-logo">{icon("conversion_path")}</span>AttackGraph AI</a>'
-        "<p>Pre-deployment review for cloud permission changes. Built for the AWS Build Beyond Student AI Demo Challenge 2026.</p></div>"
+        "<p>Pre-deployment review for cloud permission changes. Built by Chai Pin Zheng for the AWS Build Beyond Student AI "
+        "Demo Challenge 2026.</p></div>"
         f'<div><h4>Product</h4><ul><li><a href="{web.LANDING}">Overview</a></li><li><a href="{web.DEMO}">Live demo</a></li>'
-        f'<li><a href="{web.LANDING}#trust">Trust and limits</a></li></ul></div>'
+        f'<li><a href="{web.LANDING}#trust">Trust and limits</a></li><li><a href="{web.VIDEO}">Demo video</a></li>'
+        f'<li><a href="{web.REPO}">Source on GitHub</a></li></ul></div>'
         "<div><h4>Built with</h4><ul><li>Amazon Bedrock (Nova Pro)</li><li>NetworkX</li><li>Streamlit</li></ul></div>"
         f"<div><h4>Scope</h4><ul><li>Synthetic data only</li><li>Nothing is deployed</li><li>{esc(ai)}</li></ul></div></div>"
         '<div class="ag-dark-legal">A static analysis of declared facts. Results describe the synthetic model, not a real AWS account.</div>'

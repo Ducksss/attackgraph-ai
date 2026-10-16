@@ -18,6 +18,8 @@ PROTECTED_ICONS = {"privileged_role": "admin_panel_settings", "sensitive_object"
 STATE_ICONS = {"true": "check_circle", "false": "cancel", "unknown": "help"}
 RESULT_ICONS = {"pass": "check_circle", "fail": "cancel", "inconclusive": "help"}
 LANDING, DEMO = "/", "/demo"
+REPO = "https://github.com/Ducksss/attackgraph-ai"
+VIDEO = "https://youtu.be/dAE6y8M9iQI"
 
 Segments = tuple[tuple[str, str], ...]  # ("text" | "node" | "id", value), as the explanation parser returns them
 
@@ -356,6 +358,7 @@ def nav(active: str) -> str:
     links = (
         f'<a href="{home}#why">Why it matters</a><a href="{home}#how">How it works</a><a href="{home}#trust">Trust</a>'
         + (f'<a href="{DEMO}" aria-current="page">Live demo</a>' if active == DEMO else "")
+        + f'<a href="{REPO}">GitHub</a>'
     )
     cta = (
         f'<a class="ag-btn ag-btn-dark" href="{DEMO}">Open the live demo</a>'

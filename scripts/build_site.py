@@ -357,12 +357,35 @@ def upload_panel() -> str:
     )
 
 
+SITE_URL = "https://attackgraph-ai.vercel.app"
+# The link-preview image (LinkedIn, Slack, X...): the brand kit's social preview, served from the site root.
+SOCIAL_IMAGE = ROOT / "docs" / "brand" / "social-preview.png"
+SOCIAL_ALT = (
+    "AttackGraph AI: ship permission changes without shipping admin access. A new PassRole grant lets the CI deploy "
+    "user reach the deployment admin role through a Lambda function."
+)
+DESCRIPTION = (
+    "AttackGraph AI finds new routes to admin roles and sensitive data in a proposed cloud change, explains them with "
+    "Amazon Bedrock, and tests the fix."
+)
+
 HEAD = (
     '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
     '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
     "<title>{title}</title>\n"
-    '<meta name="description" content="AttackGraph AI finds new routes to admin roles and sensitive data in a proposed '
-    'cloud change, explains them with Amazon Bedrock, and tests the fix.">\n'
+    f'<meta name="description" content="{esc(DESCRIPTION)}">\n'
+    '<link rel="canonical" href="{url}">\n'
+    '<meta property="og:type" content="website">\n'
+    '<meta property="og:site_name" content="AttackGraph AI">\n'
+    '<meta property="og:title" content="{title}">\n'
+    f'<meta property="og:description" content="{esc(DESCRIPTION)}">\n'
+    '<meta property="og:url" content="{url}">\n'
+    f'<meta property="og:image" content="{SITE_URL}/og.png">\n'
+    '<meta property="og:image:type" content="image/png">\n'
+    '<meta property="og:image:width" content="1280">\n'
+    '<meta property="og:image:height" content="640">\n'
+    f'<meta property="og:image:alt" content="{esc(SOCIAL_ALT)}">\n'
+    '<meta name="twitter:card" content="summary_large_image">\n'
     '<meta name="theme-color" content="#f9f9fa">\n'
     f'<link rel="icon" href="{FAVICON}">\n'
     '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
@@ -374,9 +397,9 @@ HEAD = (
 )
 
 
-def document(title: str, body: str, script: str = "") -> str:
+def document(title: str, path: str, body: str, script: str = "") -> str:
     return (
-        HEAD.replace("{title}", esc(title))
+        HEAD.replace("{title}", esc(title)).replace("{url}", esc(SITE_URL + path))
         + f"{web.CSS}{landing.CSS}{SITE_CSS}</head>\n<body>\n<main class=\"ag-page\">{body}</main>\n{script}</body>\n</html>\n"
     )
 
@@ -408,7 +431,7 @@ def build(out: Path, recorded_path: Path = RECORDED) -> Path:
     )
 
     # Replace only what this script generates; keep dotfiles such as the Vercel project link.
-    for generated in ("index.html", "vercel.json", "demo", "reports"):
+    for generated in ("index.html", "vercel.json", "og.png", "demo", "reports"):
         target = out / generated
         if target.is_dir():
             shutil.rmtree(target)
@@ -416,8 +439,11 @@ def build(out: Path, recorded_path: Path = RECORDED) -> Path:
             target.unlink()
     (out / "reports").mkdir(parents=True)
     (out / "demo").mkdir()
-    (out / "index.html").write_text(document("AttackGraph AI: ship permission changes without shipping admin access", landing_body))
-    (out / "demo" / "index.html").write_text(document("Live demo: AttackGraph AI", demo_body, SCRIPT))
+    (out / "index.html").write_text(
+        document("AttackGraph AI: ship permission changes without shipping admin access", web.LANDING, landing_body)
+    )
+    (out / "demo" / "index.html").write_text(document("Live demo: AttackGraph AI", web.DEMO, demo_body, SCRIPT))
+    shutil.copyfile(SOCIAL_IMAGE, out / "og.png")
     for key, result in results.items():
         if result.ok:
             (out / "reports" / f"{key}.md").write_text(build_report(result.comparison, result.fixes))
