@@ -26,7 +26,7 @@ from .compare import Comparison, FindingDelta
 from .simulate import FixCandidate
 from .snapshot import PREDICATES
 
-PROMPT_VERSION = "explain-v3"
+PROMPT_VERSION = "explain-v4"
 DEFAULT_MODEL_ID = "apac.amazon.nova-pro-v1:0"
 DEFAULT_REGION = "ap-southeast-1"
 TIMEOUT_SECONDS = 20
@@ -44,6 +44,14 @@ _CHECK_TERM = re.compile(r"\bexpected[- ]access(?:es)?\b", re.IGNORECASE)
 _WIDENING = re.compile(r"\b(?:access|accesses|anything|everything|else|other|relationships|permissions)\b", re.IGNORECASE)
 # ...unless the words only name the checks themselves: "E1 and E2 access checks", "expected access relationships".
 _CHECKS_ONLY = re.compile(r"(?:(?:expected-access|expected|access)\s+)*(?:checks?|relationships?)", re.IGNORECASE)
+# A statement, anywhere in the summary, that access outside the checks is unaffected. explain-v3's live run on
+# 16 October 2026 wrote "E1 and E2 remain passing, meaning that other modeled access is unaffected".
+_UNCHECKED_CLAIM = re.compile(
+    r"\b(?:other|existing|all|remaining|unrelated)\s+(?:[\w-]+\s+){0,2}?(?:access|accesses|permissions?|relationships?)\s+"
+    r"(?:is|are|remains?|stays?|was|were)\s+(?:still\s+)?(?:unaffected|unchanged|intact|preserved|untouched|not\s+affected)\b"
+    r"|\bnothing\s+else\s+(?:changes|changed|is\s+affected)\b",
+    re.IGNORECASE,
+)
 _NODE_PREFIX = {"principal": "P", "role": "R", "lambda": "L", "s3_object": "O"}
 _DERIVED_TITLES = {
     "same_account": "same-account check",
@@ -59,7 +67,7 @@ Rules:
 - Use only information in the packet. Do not add permissions, paths, services, attack techniques or AWS behaviour that the packet does not state.
 - Do not dispute or change the finding, its severity, status, counts or coverage.
 - Describe only the fix candidate supplied in the packet, with the outcome the engine recorded. If no candidate is supplied, say that no engine-tested fix is available. Never propose another fix.
-- The engine tested the fix candidate only against the expected-access checks listed with it. State the fix's effect on other access only through those checks, citing them by alias, for example "keeps checks E1 and E2 passing". Never generalise beyond them: no "other access", "existing access", "all access" or "nothing else changes". If no checks are listed, make no claim about other access.
+- The engine tested the fix candidate only against the expected-access checks in its expected_access_after list, so those checks are everything it knows about access after the fix. Describe the fix's effect in one sentence that ends with those checks, for example: "Revoking F1 through fix candidate X1 removes this finding and keeps expected-access checks E1 and E2 passing." Name each check by alias with its after_fix result, end the sentence there, and say nothing about access, permissions or relationships outside the listed checks. If the list is empty, state only the fix's effect on this finding.
 - Make clear that this is a synthetic model: nothing was deployed, executed or changed in any AWS account, and the result is not evidence of a real compromise.
 - Refer to entities only by their aliases, and give each one its kind the first time you name it, for example "principal P1", "role R1", "Lambda workload L1".
 - State assumptions exactly as the packet words them. The entry principal is treated as controlled by the party proposing the change; never call it trusted or compromised.
@@ -364,7 +372,16 @@ def _check_fix_scope(summary: str, evidence: list) -> None:
     last word, as in "E1 and E2 access checks" or "expected access
     relationships". The claim stops at the punctuation mark, so "E1 and E2,
     or any other access" is not caught here; the prompt rule covers it.
+
+    Separately, a statement anywhere in the summary that other, existing, all,
+    remaining or unrelated access (or permissions, or relationships) is
+    unaffected, unchanged or intact, or that nothing else changes, is rejected
+    whatever checks it follows.
     """
+    unchecked = _UNCHECKED_CLAIM.search(summary)
+    if unchecked:
+        claim = " ".join(unchecked.group(0).split())
+        raise ResponseError(f'summary claims more than the engine checked: "{_quote(claim)}" goes beyond the expected-access checks')
     cites_check = any(_CHECK_ALIAS.fullmatch(e) for e in evidence)
     for match in _UNAFFECTED_CLAIM.finditer(summary):
         claim = " ".join(match.group(0).split())
