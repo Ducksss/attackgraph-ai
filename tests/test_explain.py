@@ -396,9 +396,37 @@ def test_unscoped_claims_are_rejected_with_the_reason(demo, tail, evidence, reas
     assert result.status == "invalid" and result.error == f"Reply rejected: {reason}."
 
 
+@pytest.mark.parametrize(
+    "sentence, claim",
+    [
+        (
+            # explain-v3, 16 October 2026, run 4: validated by explain-v3's checks, flagged in the review
+            "After applying X1, expected-access checks E1 and E2 remain passing, meaning that other modeled access is unaffected.",
+            "other modeled access is unaffected",
+        ),
+        ("X1 keeps checks E1 and E2 passing, and existing access remains unchanged.", "existing access remains unchanged"),
+        ("X1 keeps checks E1 and E2 passing; all other permissions are still intact.", "all other permissions are still intact"),
+        ("X1 keeps checks E1 and E2 passing, so nothing else changes.", "nothing else changes"),
+    ],
+    ids=["v3-run4-other-modeled-access", "existing-access-unchanged", "other-permissions-intact", "nothing-else-changes"],
+)
+def test_claims_that_unchecked_access_is_unaffected_are_rejected_anywhere(demo, sentence, claim):
+    _, _, packet = demo
+    reply = {**VALID, "summary": "X1 revokes F1 and removes this finding. " + sentence, "evidence_ids": ["F1", "E1", "E2"]}
+    result = explainer(FakeClient(reply=json.dumps(reply))).explain(packet)
+    assert result.status == "invalid"
+    assert result.error == f'Reply rejected: summary claims more than the engine checked: "{claim}" goes beyond the expected-access checks.'
+
+
+def test_a_statement_scoped_to_the_checks_is_not_an_unaffected_claim(demo):
+    _, _, packet = demo
+    reply = {**VALID, "summary": "X1 revokes F1 and removes this finding; other access relationships (E1, E2) remain unaffected."}
+    assert explainer(FakeClient(reply=json.dumps(reply))).explain(packet).ok
+
+
 def test_a_widening_after_a_comma_is_a_known_limit(demo):
     # The claim stops at the first punctuation mark, so ", or any other access" is outside it and the reply
-    # passes. Only the prompt rule, which forbids "other access", covers this wording.
+    # passes. Only the prompt rule, which allows nothing after the checks, covers this wording.
     _, _, packet = demo
     reply = {**VALID, "summary": "X1 revokes F1 and removes this finding without affecting E1 and E2, or any other access."}
     assert explainer(FakeClient(reply=json.dumps(reply))).explain(packet).ok
@@ -406,18 +434,22 @@ def test_a_widening_after_a_comma_is_a_known_limit(demo):
 
 def test_prompt_limits_the_fix_claim_to_the_expected_access_checks():
     rule = next(line for line in SYSTEM_PROMPT.splitlines() if line.startswith("- The engine tested the fix candidate only against"))
-    assert "expected-access checks listed with it" in rule and '"keeps checks E1 and E2 passing"' in rule
+    assert "expected-access checks in its expected_access_after list" in rule
+    assert '"Revoking F1 through fix candidate X1 removes this finding and keeps expected-access checks E1 and E2 passing."' in rule
+    assert "end the sentence there" in rule and "outside the listed checks" in rule
+    # explain-v3 quoted the phrases it forbade, and live replies still used them ("without affecting other access").
+    # explain-v4 gives only the sentence to write.
     for wider in ("other access", "existing access", "all access", "nothing else changes"):
-        assert f'"{wider}"' in rule
+        assert wider not in SYSTEM_PROMPT
 
 
 def test_prompt_version_is_part_of_the_cache_key(demo, monkeypatch):
     _, _, packet = demo
     client = FakeClient()
     ai = explainer(client)
-    assert PROMPT_VERSION == "explain-v3" and ai.cache_key(packet)[-1] == PROMPT_VERSION
-    assert ai.explain(packet).prompt_version == "explain-v3"
-    monkeypatch.setattr("attackgraph.explain.PROMPT_VERSION", "explain-v2")
+    assert PROMPT_VERSION == "explain-v4" and ai.cache_key(packet)[-1] == PROMPT_VERSION
+    assert ai.explain(packet).prompt_version == "explain-v4"
+    monkeypatch.setattr("attackgraph.explain.PROMPT_VERSION", "explain-v3")
     assert ai.cached(packet) is None  # a reply cached for one prompt version is never served for another
     ai.explain(packet)
     assert len(client.calls) == 2

@@ -38,6 +38,13 @@ def test_build_renders_the_landing_page_and_every_scenario(tmp_path):
     assert "Can it block a pull request?" in landing and "CI blocking" not in landing
     for html in (landing, demo):
         assert "\u2014" not in html and "<script>alert" not in html
+    # Link previews (LinkedIn, Slack, X) need absolute Open Graph URLs and the image served beside the pages.
+    for html, url in ((landing, "https://attackgraph-ai.vercel.app/"), (demo, "https://attackgraph-ai.vercel.app/demo")):
+        assert f'<meta property="og:url" content="{url}">' in html and f'<link rel="canonical" href="{url}">' in html
+        assert '<meta property="og:image" content="https://attackgraph-ai.vercel.app/og.png">' in html
+        assert '<meta name="twitter:card" content="summary_large_image">' in html
+        assert 'href="https://github.com/Ducksss/attackgraph-ai"' in html and 'href="https://youtu.be/dAE6y8M9iQI"' in html
+    assert (tmp_path / "site" / "og.png").read_bytes() == build_site.SOCIAL_IMAGE.read_bytes()
     assert sorted(p.name for p in (tmp_path / "site" / "reports").glob("*.md")) == ["passrole.md", "repair.md", "unknown.md"]
     headers = json.loads((tmp_path / "site" / "vercel.json").read_text())["headers"][0]["headers"]
     assert {"key": "X-Frame-Options", "value": "DENY"} in headers
